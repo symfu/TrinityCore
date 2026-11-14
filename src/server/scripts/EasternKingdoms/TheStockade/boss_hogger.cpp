@@ -15,7 +15,6 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "InstanceScript.h"
 #include "MotionMaster.h"
 #include "ScriptedCreature.h"
 #include "ScriptMgr.h"
@@ -111,7 +110,7 @@ struct boss_hogger : public BossAI
         }
     }
 
-    void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
         if (me->HealthBelowPctDamaged(30, damage) && !_hasEnraged)
         {
@@ -138,17 +137,17 @@ struct npc_warden_thelwater : public ScriptedAI
 
         if (id == POINT_FINISH)
         {
-            scheduler.Schedule(1s, [this](TaskContext /*context*/)
+            scheduler.Schedule(1s, [this](TaskContext const& /*context*/)
             {
                 Talk(SAY_WARDEN_1);
             });
 
-            scheduler.Schedule(5s, [this](TaskContext /*context*/)
+            scheduler.Schedule(5s, [this](TaskContext const& /*context*/)
             {
                 Talk(SAY_WARDEN_2);
             });
 
-            scheduler.Schedule(8s, [this](TaskContext /*context*/)
+            scheduler.Schedule(8s, [this](TaskContext const& /*context*/)
             {
                 Talk(SAY_WARDEN_3);
             });

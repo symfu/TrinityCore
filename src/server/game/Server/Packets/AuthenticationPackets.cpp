@@ -18,27 +18,29 @@
 #include "AuthenticationPackets.h"
 #include "BigNumber.h"
 #include "CharacterTemplateDataStore.h"
-#include "CryptoHash.h"
+#include "Ed25519.h"
 #include "HMAC.h"
 #include "ObjectMgr.h"
+#include "PacketOperators.h"
 #include "RSA.h"
-#include "Util.h"
 
-ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Auth::VirtualRealmNameInfo const& virtualRealmInfo)
+namespace WorldPackets::Auth
 {
-    data.WriteBit(virtualRealmInfo.IsLocal);
-    data.WriteBit(virtualRealmInfo.IsInternalRealm);
-    data.WriteBits(virtualRealmInfo.RealmNameActual.length(), 8);
-    data.WriteBits(virtualRealmInfo.RealmNameNormalized.length(), 8);
+ByteBuffer& operator<<(ByteBuffer& data, VirtualRealmNameInfo const& virtualRealmInfo)
+{
+    data << WorldPackets::Bits<1>(virtualRealmInfo.IsLocal);
+    data << WorldPackets::Bits<1>(virtualRealmInfo.IsInternalRealm);
+    data << WorldPackets::SizedString::BitsSize<8>(virtualRealmInfo.RealmNameActual);
+    data << WorldPackets::SizedString::BitsSize<8>(virtualRealmInfo.RealmNameNormalized);
     data.FlushBits();
 
-    data.WriteString(virtualRealmInfo.RealmNameActual);
-    data.WriteString(virtualRealmInfo.RealmNameNormalized);
+    data << SizedString::Data(virtualRealmInfo.RealmNameActual);
+    data << SizedString::Data(virtualRealmInfo.RealmNameNormalized);
 
     return data;
 }
 
-ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Auth::VirtualRealmInfo const& virtualRealmInfo)
+ByteBuffer& operator<<(ByteBuffer& data, VirtualRealmInfo const& virtualRealmInfo)
 {
     data << uint32(virtualRealmInfo.RealmAddress);
     data << virtualRealmInfo.RealmNameInfo;
@@ -46,33 +48,24 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Auth::VirtualRealmInfo co
     return data;
 }
 
-bool WorldPackets::Auth::EarlyProcessClientPacket::ReadNoThrow()
-{
-    try
-    {
-        Read();
-        return true;
-    }
-    catch (ByteBufferException const& /*ex*/)
-    {
-    }
-
-    return false;
-}
-
-void WorldPackets::Auth::Ping::Read()
+void Ping::Read()
 {
     _worldPacket >> Serial;
     _worldPacket >> Latency;
 }
 
-const WorldPacket* WorldPackets::Auth::Pong::Write()
+WorldPacket const* Pong::Write()
 {
     _worldPacket << uint32(Serial);
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::Auth::AuthChallenge::Write()
+void LogDisconnect::Read()
+{
+    _worldPacket >> Reason;
+}
+
+WorldPacket const* AuthChallenge::Write()
 {
     _worldPacket.append(DosChallenge.data(), DosChallenge.size());
     _worldPacket.append(Challenge.data(), Challenge.size());
@@ -80,7 +73,7 @@ WorldPacket const* WorldPackets::Auth::AuthChallenge::Write()
     return &_worldPacket;
 }
 
-void WorldPackets::Auth::AuthSession::Read()
+void AuthSession::Read()
 {
     uint32 realmJoinTicketSize;
 
@@ -90,106 +83,132 @@ void WorldPackets::Auth::AuthSession::Read()
     _worldPacket >> RealmID;
     _worldPacket.read(LocalChallenge.data(), LocalChallenge.size());
     _worldPacket.read(Digest.data(), Digest.size());
-    UseIPv6 = _worldPacket.ReadBit();
+    _worldPacket >> Bits<1>(UseIPv6);
     _worldPacket >> realmJoinTicketSize;
     if (realmJoinTicketSize)
     {
         RealmJoinTicket.resize(std::min(realmJoinTicketSize, uint32(_worldPacket.size() - _worldPacket.rpos())));
-        _worldPacket.read(reinterpret_cast<uint8*>(&RealmJoinTicket[0]), RealmJoinTicket.size());
+        _worldPacket.read(RealmJoinTicket.data(), RealmJoinTicket.size());
     }
 }
 
-ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Auth::AuthWaitInfo const& waitInfo)
+ByteBuffer& operator<<(ByteBuffer& data, GameTime const& gameTime)
 {
-    data << uint32(waitInfo.WaitCount);
-    data << uint32(waitInfo.WaitTime);
-    data.WriteBit(waitInfo.HasFCM);
+    data << uint32(gameTime.BillingType);
+    data << uint32(gameTime.MinutesRemaining);
+    data << uint32(gameTime.RealBillingType);
+    data << Bits<1>(gameTime.IsInIGR);
+    data << Bits<1>(gameTime.IsPaidForByIGR);
+    data << Bits<1>(gameTime.IsCAISEnabled);
     data.FlushBits();
 
     return data;
 }
 
-WorldPacket const* WorldPackets::Auth::AuthResponse::Write()
+ByteBuffer& operator<<(ByteBuffer& data, BaseBuildKey const& buildKey)
+{
+    for (std::size_t i = 0; i < 16; ++i)
+    {
+        data << buildKey.BuildKey[i];
+        data << buildKey.ConfigKey[i];
+    }
+
+    return data;
+}
+
+ByteBuffer& operator<<(ByteBuffer& data, AuthSuccessInfo const& successInfo)
+{
+    data << uint32(successInfo.VirtualRealmAddress);
+    data << Size<uint32>(successInfo.VirtualRealms);
+    data << uint32(successInfo.TimeRested);
+    data << uint8(successInfo.ActiveExpansionLevel);
+    data << uint8(successInfo.AccountExpansionLevel);
+    data << uint32(successInfo.TimeSecondsUntilPCKick);
+    data << Size<uint32>(*successInfo.AvailableClasses);
+    data << Size<uint32>(successInfo.Templates);
+    data << uint32(successInfo.CurrencyID);
+    data << successInfo.GameTimeInfo;
+    data << successInfo.Time;
+
+    for (VirtualRealmInfo const& virtualRealm : successInfo.VirtualRealms)
+        data << virtualRealm;
+
+    for (RaceClassAvailability const& raceClassAvailability : *successInfo.AvailableClasses)
+    {
+        data << uint8(raceClassAvailability.RaceID);
+        data << Size<uint32>(raceClassAvailability.Classes);
+
+        for (ClassAvailability const& classAvailability : raceClassAvailability.Classes)
+        {
+            data << uint8(classAvailability.ClassID);
+            data << uint8(classAvailability.ActiveExpansionLevel);
+            data << uint8(classAvailability.AccountExpansionLevel);
+            data << uint8(classAvailability.MinActiveExpansionLevel);
+        }
+    }
+
+    for (CharacterTemplate const* characterTemplate : successInfo.Templates)
+    {
+        data << uint32(characterTemplate->TemplateSetId);
+        data << Size<uint32>(characterTemplate->Classes);
+        for (CharacterTemplateClass const& templateClass : characterTemplate->Classes)
+        {
+            data << uint8(templateClass.ClassID);
+            data << uint8(templateClass.FactionGroup);
+        }
+
+        data << SizedString::BitsSize<7>(characterTemplate->Name);
+        data << SizedString::BitsSize<10>(characterTemplate->Description);
+        data.FlushBits();
+
+        data << SizedString::Data(characterTemplate->Name);
+        data << SizedString::Data(characterTemplate->Description);
+    }
+
+    data << Bits<1>(successInfo.IsExpansionTrial);
+    data << Bits<1>(successInfo.ForceCharacterTemplate);
+    data << OptionalInit(successInfo.NumPlayersHorde);
+    data << OptionalInit(successInfo.NumPlayersAlliance);
+    data << OptionalInit(successInfo.ExpansionTrialExpiration);
+    data << OptionalInit(successInfo.CurrentBuild);
+    data.FlushBits();
+
+    if (successInfo.NumPlayersHorde)
+        data << uint16(*successInfo.NumPlayersHorde);
+
+    if (successInfo.NumPlayersAlliance)
+        data << uint16(*successInfo.NumPlayersAlliance);
+
+    if (successInfo.ExpansionTrialExpiration)
+        data << *successInfo.ExpansionTrialExpiration;
+
+    if (successInfo.CurrentBuild)
+        data << *successInfo.CurrentBuild;
+
+    return data;
+}
+
+ByteBuffer& operator<<(ByteBuffer& data, AuthWaitInfo const& waitInfo)
+{
+    data << uint32(waitInfo.WaitCount);
+    data << uint32(waitInfo.WaitTime);
+    data << uint8(waitInfo.AllowedFactionGroupForCharacterCreate);
+    data << WorldPackets::Bits<1>(waitInfo.HasFCM);
+    data << WorldPackets::Bits<1>(waitInfo.CanCreateOnlyIfExisting);
+    data.FlushBits();
+
+    return data;
+}
+
+WorldPacket const* AuthResponse::Write()
 {
     _worldPacket << uint32(Result);
-    _worldPacket.WriteBit(SuccessInfo.has_value());
-    _worldPacket.WriteBit(WaitInfo.has_value());
+    _worldPacket << OptionalInit(SuccessInfo);
+    _worldPacket << OptionalInit(WaitInfo);
     _worldPacket.FlushBits();
 
     if (SuccessInfo)
-    {
-        _worldPacket << uint32(SuccessInfo->VirtualRealmAddress);
-        _worldPacket << uint32(SuccessInfo->VirtualRealms.size());
-        _worldPacket << uint32(SuccessInfo->TimeRested);
-        _worldPacket << uint8(SuccessInfo->ActiveExpansionLevel);
-        _worldPacket << uint8(SuccessInfo->AccountExpansionLevel);
-        _worldPacket << uint32(SuccessInfo->TimeSecondsUntilPCKick);
-        _worldPacket << uint32(SuccessInfo->AvailableClasses->size());
-        _worldPacket << uint32(SuccessInfo->Templates.size());
-        _worldPacket << uint32(SuccessInfo->CurrencyID);
-        _worldPacket << SuccessInfo->Time;
-
-        for (RaceClassAvailability const& raceClassAvailability : *SuccessInfo->AvailableClasses)
-        {
-            _worldPacket << uint8(raceClassAvailability.RaceID);
-            _worldPacket << uint32(raceClassAvailability.Classes.size());
-
-            for (ClassAvailability const& classAvailability : raceClassAvailability.Classes)
-            {
-                _worldPacket << uint8(classAvailability.ClassID);
-                _worldPacket << uint8(classAvailability.ActiveExpansionLevel);
-                _worldPacket << uint8(classAvailability.AccountExpansionLevel);
-            }
-        }
-
-        _worldPacket.WriteBit(SuccessInfo->IsExpansionTrial);
-        _worldPacket.WriteBit(SuccessInfo->ForceCharacterTemplate);
-        _worldPacket.WriteBit(SuccessInfo->NumPlayersHorde.has_value());
-        _worldPacket.WriteBit(SuccessInfo->NumPlayersAlliance.has_value());
-        _worldPacket.WriteBit(SuccessInfo->ExpansionTrialExpiration.has_value());
-        _worldPacket.FlushBits();
-
-        {
-            _worldPacket << uint32(SuccessInfo->GameTimeInfo.BillingPlan);
-            _worldPacket << uint32(SuccessInfo->GameTimeInfo.TimeRemain);
-            _worldPacket << uint32(SuccessInfo->GameTimeInfo.Unknown735);
-            // 3x same bit is not a mistake - preserves legacy client behavior of BillingPlanFlags::SESSION_IGR
-            _worldPacket.WriteBit(SuccessInfo->GameTimeInfo.InGameRoom); // inGameRoom check in function checking which lua event to fire when remaining time is near end - BILLING_NAG_DIALOG vs IGR_BILLING_NAG_DIALOG
-            _worldPacket.WriteBit(SuccessInfo->GameTimeInfo.InGameRoom); // inGameRoom lua return from Script_GetBillingPlan
-            _worldPacket.WriteBit(SuccessInfo->GameTimeInfo.InGameRoom); // not used anywhere in the client
-            _worldPacket.FlushBits();
-        }
-
-        if (SuccessInfo->NumPlayersHorde)
-            _worldPacket << uint16(*SuccessInfo->NumPlayersHorde);
-
-        if (SuccessInfo->NumPlayersAlliance)
-            _worldPacket << uint16(*SuccessInfo->NumPlayersAlliance);
-
-        if (SuccessInfo->ExpansionTrialExpiration)
-            _worldPacket << int32(*SuccessInfo->ExpansionTrialExpiration);
-
-        for (VirtualRealmInfo const& virtualRealm : SuccessInfo->VirtualRealms)
-            _worldPacket << virtualRealm;
-
-        for (CharacterTemplate const* templat : SuccessInfo->Templates)
-        {
-            _worldPacket << uint32(templat->TemplateSetId);
-            _worldPacket << uint32(templat->Classes.size());
-            for (CharacterTemplateClass const& templateClass : templat->Classes)
-            {
-                _worldPacket << uint8(templateClass.ClassID);
-                _worldPacket << uint8(templateClass.FactionGroup);
-            }
-
-            _worldPacket.WriteBits(templat->Name.length(), 7);
-            _worldPacket.WriteBits(templat->Description.length(), 10);
-            _worldPacket.FlushBits();
-
-            _worldPacket.WriteString(templat->Name);
-            _worldPacket.WriteString(templat->Description);
-        }
-    }
+        _worldPacket << *SuccessInfo;
 
     if (WaitInfo)
         _worldPacket << *WaitInfo;
@@ -197,7 +216,7 @@ WorldPacket const* WorldPackets::Auth::AuthResponse::Write()
     return &_worldPacket;
 }
 
-WorldPacket const* WorldPackets::Auth::WaitQueueUpdate::Write()
+WorldPacket const* WaitQueueUpdate::Write()
 {
     _worldPacket << WaitInfo;
 
@@ -206,7 +225,7 @@ WorldPacket const* WorldPackets::Auth::WaitQueueUpdate::Write()
 
 namespace
 {
-std::string RSAPrivateKey = R"(-----BEGIN RSA PRIVATE KEY-----
+std::string const RSAPrivateKey = R"(-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEA7rPc1NPDtFRRzmZbyzK48PeSU8YZ8gyFL4omqXpFn2DE683q
 f41Z2FeyYHsJTJtouMft7x6ADeZrN1tTkOsYEw1/Q2SD2pjmrMIwooKlxsvH+4af
 n6kCagNJxTj7wMhVzMDOJZG+hc/R0TfOzIPS6jCAB3uAn51EVCIpvoba20jFqfkT
@@ -235,90 +254,141 @@ OHYtKG3GK3GEcFDwZU2LPHq21EroUAdtRfbrJ4KW2yc8igtXKxTBYw==
 -----END RSA PRIVATE KEY-----
 )";
 
-std::unique_ptr<Trinity::Crypto::RSA> ConnectToRSA;
+std::array<uint8, 32> constexpr EnterEncryptedModePrivateKey =
+{
+    0x08, 0xBD, 0xC7, 0xA3, 0xCC, 0xC3, 0x4F, 0x3F,
+    0x6A, 0x0B, 0xFF, 0xCF, 0x31, 0xC1, 0xB6, 0x97,
+    0x69, 0x1E, 0x72, 0x9A, 0x0A, 0xAB, 0x2C, 0x77,
+    0xC3, 0x6F, 0x8A, 0xE7, 0x5A, 0x9A, 0xA7, 0xC9
+};
+
+std::unique_ptr<Trinity::Crypto::RsaSignature> ConnectToRSA;
+std::unique_ptr<Trinity::Crypto::Ed25519> EnterEncryptedModeSigner;
 }
 
-bool WorldPackets::Auth::ConnectTo::InitializeEncryption()
+ByteBuffer& operator<<(ByteBuffer& data, ConnectTo::BleepToken const& bleepToken)
 {
-    std::unique_ptr<Trinity::Crypto::RSA> rsa = std::make_unique<Trinity::Crypto::RSA>();
-    if (!rsa->LoadFromString(RSAPrivateKey, Trinity::Crypto::RSA::PrivateKey{}))
+    data << SizedString::BitsSize<5>(bleepToken.Token);
+    data << SizedCString::BitsSize<24>(bleepToken.ProxyId);
+    data << SizedString::BitsSize<6>(bleepToken.Address);
+    data << bleepToken.TokenLifespan;
+    data << SizedString::Data(bleepToken.Token);
+    data << SizedCString::Data(bleepToken.ProxyId);
+    data << SizedString::Data(bleepToken.Address);
+
+    return data;
+}
+
+ByteBuffer& operator<<(ByteBuffer& data, ConnectTo::ConnectPayload const& payload)
+{
+    data << uint8(payload.Address.Type);
+    switch (payload.Address.Type)
+    {
+        case ConnectTo::IPv4:
+            data.append(payload.Address.Address.V4.data(), payload.Address.Address.V4.size());
+            break;
+        case ConnectTo::IPv6:
+            data.append(payload.Address.Address.V6.data(), payload.Address.Address.V6.size());
+            break;
+        case ConnectTo::NamedSocket:
+            data << payload.Address.Address.Name.data();
+            break;
+        default:
+            break;
+    }
+
+    data << uint16(payload.Port);
+    data << payload.Token;
+
+    return data;
+}
+
+bool ConnectTo::InitializeEncryption()
+{
+    std::unique_ptr<Trinity::Crypto::RsaSignature> rsa = std::make_unique<Trinity::Crypto::RsaSignature>();
+    if (!rsa->LoadKeyFromString(RSAPrivateKey))
         return false;
 
     ConnectToRSA = std::move(rsa);
     return true;
 }
 
-WorldPackets::Auth::ConnectTo::ConnectTo() : ServerPacket(SMSG_CONNECT_TO, 256 + 1 + 16 + 2 + 4 + 1 + 8)
+void ConnectTo::ShutdownEncryption()
 {
+    ConnectToRSA.reset();
 }
 
-WorldPacket const* WorldPackets::Auth::ConnectTo::Write()
+WorldPacket const* ConnectTo::Write()
 {
-    ByteBuffer whereBuffer;
-    whereBuffer << uint8(Payload.Where.Type);
-    switch (Payload.Where.Type)
-    {
-        case IPv4:
-            whereBuffer.append(Payload.Where.Address.V4.data(), Payload.Where.Address.V4.size());
-            break;
-        case IPv6:
-            whereBuffer.append(Payload.Where.Address.V6.data(), Payload.Where.Address.V6.size());
-            break;
-        case NamedSocket:
-            whereBuffer << Payload.Where.Address.Name.data();
-            break;
-        default:
-            break;
-    }
-
-    uint32 type = Payload.Where.Type;
-    Trinity::Crypto::SHA256 hash;
-    hash.UpdateData(whereBuffer.contents(), whereBuffer.size());
-    hash.UpdateData(reinterpret_cast<uint8 const*>(&type), 4);
-    hash.UpdateData(reinterpret_cast<uint8 const*>(&Payload.Port), 2);
-    hash.Finalize();
-
-    ConnectToRSA->Sign(hash.GetDigest(), Payload.Signature.data(), Trinity::Crypto::RSA::SHA256{});
-
-    _worldPacket.append(Payload.Signature.data(), Payload.Signature.size());
-    _worldPacket.append(whereBuffer);
-    _worldPacket << uint16(Payload.Port);
+    _worldPacket << Size<uint32>(Payload);
     _worldPacket << uint32(Serial);
     _worldPacket << uint8(Con);
     _worldPacket << uint64(Key);
+    _worldPacket << uint32(NativeRealmAddress);
+    _worldPacket << uint32(Key3);
+
+    for (ConnectPayload const& payload : Payload)
+        _worldPacket << payload;
 
     return &_worldPacket;
 }
 
-void WorldPackets::Auth::AuthContinuedSession::Read()
+void AuthContinuedSession::Read()
 {
     _worldPacket >> DosResponse;
-    _worldPacket >> Key;
     _worldPacket.read(LocalChallenge.data(), LocalChallenge.size());
     _worldPacket.read(Digest.data(), Digest.size());
+    _worldPacket >> Key;
+    _worldPacket >> NativeRealmAddress;
+    _worldPacket >> Key3;
 }
 
-void WorldPackets::Auth::ConnectToFailed::Read()
+void ConnectToFailed::Read()
 {
-    Serial = _worldPacket.read<ConnectToSerial>();
     _worldPacket >> Con;
+    _worldPacket >> As<uint32>(Serial);
 }
 
-uint8 constexpr EnableEncryptionSeed[16] = { 0x90, 0x9C, 0xD0, 0x50, 0x5A, 0x2C, 0x14, 0xDD, 0x5C, 0x2C, 0xC0, 0x64, 0x14, 0xF3, 0xFE, 0xC9 };
-
-WorldPacket const* WorldPackets::Auth::EnterEncryptedMode::Write()
+bool EnterEncryptedMode::InitializeEncryption()
 {
-    Trinity::Crypto::HMAC_SHA256 hash(EncryptionKey, 16);
-    hash.UpdateData(reinterpret_cast<uint8 const*>(&Enabled), 1);
-    hash.UpdateData(EnableEncryptionSeed, 16);
-    hash.Finalize();
+    std::unique_ptr<Trinity::Crypto::Ed25519> ed25519 = std::make_unique<Trinity::Crypto::Ed25519>();
+    if (!ed25519->LoadFromByteArray(EnterEncryptedModePrivateKey))
+        return false;
 
-    _worldPacket.resize(_worldPacket.size() + ConnectToRSA->GetOutputSize());
+    EnterEncryptedModeSigner = std::move(ed25519);
+    return true;
+}
 
-    ConnectToRSA->Sign(hash.GetDigest(), _worldPacket.contents(), Trinity::Crypto::RSA::SHA256{});
+void EnterEncryptedMode::ShutdownEncryption()
+{
+    EnterEncryptedModeSigner.reset();
+}
 
-    _worldPacket.WriteBit(Enabled);
+std::array<uint8, 32> constexpr EnableEncryptionSeed = { 0x66, 0xBE, 0x29, 0x79, 0xEF, 0xF2, 0xD5, 0xB5, 0x61, 0x53, 0xF6, 0x5F, 0x45, 0xAE, 0x81, 0xCB,
+    0x32, 0xEC, 0x94, 0xEC, 0x75, 0xB3, 0x5F, 0x44, 0x6A, 0x63, 0x43, 0x67, 0x17, 0x20, 0x44, 0x34 };
+std::array<uint8, 16> constexpr EnableEncryptionContext = { 0xA7, 0x1F, 0xB6, 0x9B, 0xC9, 0x7C, 0xDD, 0x96, 0xE9, 0xBB, 0xB8, 0x21, 0x39, 0x8D, 0x5A, 0xD4 };
+
+WorldPacket const* EnterEncryptedMode::Write()
+{
+    std::array<uint8, 64> toSign = Trinity::Crypto::HMAC_SHA512::GetDigestOf(EncryptionKey,
+        std::array<uint8, 1>{uint8(Enabled ? 1 : 0)},
+        EnableEncryptionSeed);
+
+    Trinity::Crypto::Ed25519 ed25519(*EnterEncryptedModeSigner);
+    std::vector<uint8> signature;
+
+    ed25519.SignWithContext(toSign, { EnableEncryptionContext.begin(), EnableEncryptionContext.end() }, signature);
+
+    _worldPacket << int32(RegionGroup);
+    _worldPacket.append(signature.data(), signature.size());
+    _worldPacket << Bits<1>(Enabled);
     _worldPacket.FlushBits();
 
     return &_worldPacket;
+}
+
+void QueuedMessagesEnd::Read()
+{
+    _worldPacket >> Timestamp;
+}
 }

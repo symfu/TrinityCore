@@ -22,16 +22,15 @@
 #include "CreatureAI.h"
 #include "InstanceScript.h"
 
-DoorData const doorData[] =
+static constexpr DoorData doorData[] =
 {
-    { GO_KRIKTHIR_DOOR,     DATA_KRIKTHIR,                  DOOR_TYPE_PASSAGE },
-    { GO_ANUBARAK_DOOR_1,   DATA_ANUBARAK,                  DOOR_TYPE_ROOM    },
-    { GO_ANUBARAK_DOOR_2,   DATA_ANUBARAK,                  DOOR_TYPE_ROOM    },
-    { GO_ANUBARAK_DOOR_3,   DATA_ANUBARAK,                  DOOR_TYPE_ROOM    },
-    { 0,                    0,                              DOOR_TYPE_ROOM    } // END
+    { GO_KRIKTHIR_DOOR,     DATA_KRIKTHIR,                  EncounterDoorBehavior::OpenWhenDone },
+    { GO_ANUBARAK_DOOR_1,   DATA_ANUBARAK,                  EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_ANUBARAK_DOOR_2,   DATA_ANUBARAK,                  EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_ANUBARAK_DOOR_3,   DATA_ANUBARAK,                  EncounterDoorBehavior::OpenWhenNotInProgress },
 };
 
-ObjectData const creatureData[] =
+static constexpr ObjectData creatureData[] =
 {
     { NPC_KRIKTHIR,        DATA_KRIKTHIR        },
     { NPC_HADRONOX,        DATA_HADRONOX        },
@@ -39,14 +38,12 @@ ObjectData const creatureData[] =
     { NPC_WATCHER_NARJIL,  DATA_WATCHER_GASHRA  },
     { NPC_WATCHER_GASHRA,  DATA_WATCHER_SILTHIK },
     { NPC_WATCHER_SILTHIK, DATA_WATCHER_NARJIL  },
-    { 0,                   0                    } // END
 };
 
-ObjectData const gameobjectData[] =
+static constexpr ObjectData gameobjectData[] =
 {
     { GO_ANUBARAK_DOOR_1, DATA_ANUBARAK_WALL   },
     { GO_ANUBARAK_DOOR_3, DATA_ANUBARAK_WALL_2 },
-    { 0,                  0                    } // END
 };
 
 BossBoundaryData const boundaries =
@@ -54,6 +51,13 @@ BossBoundaryData const boundaries =
     { DATA_KRIKTHIR, new RectangleBoundary(400.0f, 580.0f, 623.5f, 810.0f)     },
     { DATA_HADRONOX, new ZRangeBoundary(666.0f, 776.0f)                        },
     { DATA_ANUBARAK, new CircleBoundary(Position(550.6178f, 253.5917f), 26.0f) }
+};
+
+static constexpr DungeonEncounterData encounters[] =
+{
+    { DATA_KRIKTHIR, {{ 1971 }} },
+    { DATA_HADRONOX, {{ 1972 }} },
+    { DATA_ANUBARAK, {{ 1973 }} }
 };
 
 class instance_azjol_nerub : public InstanceMapScript
@@ -70,6 +74,7 @@ class instance_azjol_nerub : public InstanceMapScript
                 LoadBossBoundaries(boundaries);
                 LoadDoorData(doorData);
                 LoadObjectData(creatureData, gameobjectData);
+                LoadDungeonEncounterData(encounters);
                 GateWatcherGreet = 0;
             }
 

@@ -15,113 +15,123 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+ * Timers requires to be revisited
+ * Is Dark Shell cast really delayed? Currently we have to delay it to not interrupt Void Blast sequence
+ * Spell 32326 is NYI. Not sure what it does. Don't know if it is used or not
+ */
+
 #include "ScriptMgr.h"
-#include "mana_tombs.h"
 #include "ScriptedCreature.h"
+#include "Spell.h"
+#include "SpellScript.h"
+#include "SpellInfo.h"
+#include "mana_tombs.h"
 
-enum Texts
+enum PandemoniusTexts
 {
-    SAY_AGGRO                       = 0,
-    SAY_KILL                        = 1,
-    SAY_DEATH                       = 2,
-    EMOTE_DARK_SHELL                = 3
+    SAY_AGGRO                 = 0,
+    SAY_SLAY                  = 1,
+    SAY_DEATH                 = 2,
+    EMOTE_DARK_SHELL          = 3
 };
 
-enum Spells
+enum PandemoniusSpells
 {
-    SPELL_VOID_BLAST = 32325,
-    SPELL_DARK_SHELL = 32358
+    SPELL_VOID_BLAST          = 38760
 };
 
-enum Events
+#define SPELL_DARK_SHELL DUNGEON_MODE<uint32>(32358,38759)
+
+enum PandemoniusEvents
 {
-    EVENT_VOID_BLAST = 1,
-    EVENT_DARK_SHELL
+    EVENT_VOID_BLAST          = 1,
+    EVENT_DARK_SHELL,
+
+    DARK_SHELL_EVENT_GROUP
 };
 
-uint32 constexpr DARK_SHELL_EVENT_GROUP = 1;
-
-class boss_pandemonius : public CreatureScript
+// 18341 - Pandemonius
+struct boss_pandemonius : public BossAI
 {
-public:
-    boss_pandemonius() : CreatureScript("boss_pandemonius") { }
+    boss_pandemonius(Creature* creature) : BossAI(creature, DATA_PANDEMONIUS) { }
 
-    struct boss_pandemoniusAI : public BossAI
+    void JustEngagedWith(Unit* who) override
     {
-        boss_pandemoniusAI(Creature* creature) : BossAI(creature, DATA_PANDEMONIUS)
-        {
-            VoidBlastCounter = 0;
-        }
+        BossAI::JustEngagedWith(who);
 
-        void Reset() override
-        {
-            _Reset();
-            VoidBlastCounter = 0;
-        }
+        Talk(SAY_AGGRO);
 
-        void JustDied(Unit* /*killer*/) override
-        {
-            Talk(SAY_DEATH);
-        }
+        events.ScheduleEvent(EVENT_VOID_BLAST, 10s, 25s);
+        events.ScheduleEvent(EVENT_DARK_SHELL, 15s, 20s, DARK_SHELL_EVENT_GROUP);
+    }
 
-        void KilledUnit(Unit* /*victim*/) override
-        {
-            Talk(SAY_KILL);
-        }
-
-        void JustEngagedWith(Unit* who) override
-        {
-            BossAI::JustEngagedWith(who);
-            Talk(SAY_AGGRO);
-            events.ScheduleEvent(EVENT_DARK_SHELL, 20s, DARK_SHELL_EVENT_GROUP);
-            events.ScheduleEvent(EVENT_VOID_BLAST, 8s, 23s);
-        }
-
-        void ExecuteEvent(uint32 eventId) override
-        {
-            switch (eventId)
-            {
-                case EVENT_VOID_BLAST:
-                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true))
-                    {
-                        DoCast(target, SPELL_VOID_BLAST);
-                        ++VoidBlastCounter;
-                    }
-
-                    if (VoidBlastCounter == 5)
-                    {
-                        VoidBlastCounter = 0;
-                        events.ScheduleEvent(EVENT_VOID_BLAST, 15s, 25s);
-                    }
-                    else
-                    {
-                        events.ScheduleEvent(EVENT_VOID_BLAST, 500ms);
-                        events.DelayEvents(500ms, DARK_SHELL_EVENT_GROUP);
-                    }
-                    break;
-                case EVENT_DARK_SHELL:
-                    if (me->IsNonMeleeSpellCast(false))
-                        me->InterruptNonMeleeSpells(true);
-                    Talk(EMOTE_DARK_SHELL);
-                    DoCast(me, SPELL_DARK_SHELL);
-                    events.ScheduleEvent(EVENT_DARK_SHELL, 20s, DARK_SHELL_EVENT_GROUP);
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        private:
-            uint32 VoidBlastCounter;
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
+    void OnSpellStart(SpellInfo const* spellInfo) override
     {
-        return GetManaTombsAI<boss_pandemoniusAI>(creature);
+        if (spellInfo->Id == SPELL_DARK_SHELL)
+            Talk(EMOTE_DARK_SHELL);
+    }
+
+    void KilledUnit(Unit* /*victim*/) override
+    {
+        Talk(SAY_SLAY);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        _JustDied();
+        Talk(SAY_DEATH);
+    }
+
+    void ExecuteEvent(uint32 eventId) override
+    {
+        switch (eventId)
+        {
+            case EVENT_VOID_BLAST:
+                if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100.0f))
+                    DoCast(target, SPELL_VOID_BLAST);
+                events.Repeat(25s, 35s);
+                events.DelayEvents(2500ms, DARK_SHELL_EVENT_GROUP);
+                break;
+            case EVENT_DARK_SHELL:
+                DoCastSelf(SPELL_DARK_SHELL);
+                events.Repeat(20s, 30s);
+                break;
+            default:
+                break;
+        }
+    }
+};
+
+// 32325, 38760 - Void Blast
+class spell_pandemonius_void_blast : public SpellScript
+{
+    void TriggerNext()
+    {
+        int32 castIndex = GetCastIndex();
+        if (castIndex >= 4)
+            return;
+
+        if (Creature* caster = GetCaster()->ToCreature())
+            if (Unit* target = caster->AI()->SelectTarget(SelectTargetMethod::Random, 0, 100.0f))
+                caster->CastSpell(target, GetSpellInfo()->Id, CastSpellExtraArgs()
+                    .AddSpellMod(SPELLVALUE_BASE_POINT2, castIndex + 1));
+    }
+
+    int32 GetCastIndex() const
+    {
+        // We are storing number of casts in a non-effect SPELLVALUE_BASE_POINT2
+        return GetSpellValue()->EffectBasePoints[EFFECT_2];
+    }
+
+    void Register() override
+    {
+        AfterCast += SpellCastFn(spell_pandemonius_void_blast::TriggerNext);
     }
 };
 
 void AddSC_boss_pandemonius()
 {
-    new boss_pandemonius();
+    RegisterManaTombsCreatureAI(boss_pandemonius);
+    RegisterSpellScript(spell_pandemonius_void_blast);
 }

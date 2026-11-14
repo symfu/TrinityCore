@@ -46,16 +46,7 @@ enum UKCreatureIds
     NPC_PRINCE_KELESETH     = 23953,
     NPC_SKARVALD            = 24200,
     NPC_DALRONN             = 24201,
-    NPC_INGVAR              = 23954,
-
-    // Skarvald - Dalronn
-    NPC_DALRONN_GHOST       = 27389,
-    NPC_SKARVALD_GHOST      = 27390,
-
-    // Ingvar the Plunderer
-    NPC_INGVAR_UNDEAD       = 23980,
-    NPC_THROW_TARGET        = 23996,
-    NPC_ANNHYLDE_THE_CALLER = 24068
+    NPC_INGVAR              = 23954
 };
 
 enum UKGameObjectIds
@@ -78,7 +69,7 @@ enum UKGameObjectIds
 
 struct ForgeInfo
 {
-    ForgeInfo() : Event(NOT_STARTED) { };
+    ForgeInfo() : Event(NOT_STARTED) { }
 
     ObjectGuid AnvilGUID;
     ObjectGuid BellowGUID;
@@ -92,5 +83,7 @@ inline AI* GetUtgardeKeepAI(T* obj)
 {
     return GetInstanceAI<AI>(obj, UKScriptName);
 }
+
+#define RegisterUtgardeKeepCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetUtgardeKeepAI)
 
 #endif // UTGARDE_KEEP_H_

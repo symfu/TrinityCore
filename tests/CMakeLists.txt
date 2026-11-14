@@ -8,16 +8,27 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-CollectSourceFiles(
-  ${CMAKE_CURRENT_SOURCE_DIR}/common
-  COMMON_SOURCES
-)
+GroupSources(${CMAKE_CURRENT_SOURCE_DIR})
 
-add_executable(tests-common ${COMMON_SOURCES})
+add_executable(tests)
 
-target_link_libraries(tests-common
+CollectAndAddSourceFiles(
+  tests
+  ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(tests
   PRIVATE
-    common
-    Catch2::Catch2)
+    trinity-core-interface
+    game
+    Catch2::Catch2WithMain)
 
-catch_discover_tests(tests-common)
+target_include_directories(tests
+  PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR})
+
+catch_discover_tests(tests)
+
+set_target_properties(tests
+    PROPERTIES
+      FOLDER
+        "tests")

@@ -18,20 +18,17 @@
 #include "Log.h"
 #include "AppenderConsole.h"
 #include "AppenderFile.h"
-#include "Common.h"
 #include "Config.h"
 #include "Errors.h"
-#include "Logger.h"
 #include "LogMessage.h"
 #include "LogOperation.h"
+#include "Logger.h"
 #include "Strand.h"
+#include "StringConvert.h"
 #include "Util.h"
-#include <chrono>
-#include <sstream>
 
-Log::Log() : AppenderId(0), lowestLogLevel(LOG_LEVEL_FATAL), _ioContext(nullptr), _strand(nullptr)
+Log::Log() : AppenderId(0), lowestLogLevel(LOG_LEVEL_FATAL), m_logsTimestamp('_' + GetTimestampStr()), _ioContext(nullptr), _strand(nullptr)
 {
-    m_logsTimestamp = "_" + GetTimestampStr();
     RegisterAppender<AppenderConsole>();
     RegisterAppender<AppenderFile>();
 }
@@ -47,7 +44,7 @@ uint8 Log::NextAppenderId()
     return AppenderId++;
 }
 
-Appender* Log::GetAppenderByName(std::string const& name)
+Appender* Log::GetAppenderByName(std::string_view name)
 {
     auto it = appenders.begin();
     while (it != appenders.end() && it->second && it->second->getName() != name)
@@ -65,10 +62,9 @@ void Log::CreateAppenderFromConfigLine(std::string const& appenderName, std::str
     // if type = File. optional1 = file and option2 = mode
     // if type = Console. optional1 = Color
 
-    Tokenizer tokens(options, ',');
-    auto iter = tokens.begin();
+    std::vector<std::string_view> tokens = Trinity::Tokenize(options, ',', true);
 
-    size_t size = tokens.size();
+    size_t const size = tokens.size();
     std::string name = appenderName.substr(9);
 
     if (size < 2)
@@ -78,33 +74,41 @@ void Log::CreateAppenderFromConfigLine(std::string const& appenderName, std::str
     }
 
     AppenderFlags flags = APPENDER_FLAGS_NONE;
-    AppenderType type = AppenderType(atoi(*iter++));
-    LogLevel level = LogLevel(atoi(*iter++));
-
-    if (level > LOG_LEVEL_FATAL)
-    {
-        fprintf(stderr, "Log::CreateAppenderFromConfig: Wrong Log Level %d for appender %s\n", level, name.c_str());
-        return;
-    }
-
-    if (size > 2)
-        flags = AppenderFlags(atoi(*iter++));
+    AppenderType type = AppenderType(Trinity::StringTo<uint8>(tokens[0]).value_or(APPENDER_INVALID));
+    LogLevel level = LogLevel(Trinity::StringTo<uint8>(tokens[1]).value_or(LOG_LEVEL_INVALID));
 
     auto factoryFunction = appenderFactory.find(type);
     if (factoryFunction == appenderFactory.end())
     {
-        fprintf(stderr, "Log::CreateAppenderFromConfig: Unknown type %d for appender %s\n", type, name.c_str());
+        fprintf(stderr, "Log::CreateAppenderFromConfig: Unknown type '" STRING_VIEW_FMT "' for appender %s\n", STRING_VIEW_FMT_ARG(tokens[0]), name.c_str());
         return;
+    }
+
+    if (level > NUM_ENABLED_LOG_LEVELS)
+    {
+        fprintf(stderr, "Log::CreateAppenderFromConfig: Wrong Log Level '" STRING_VIEW_FMT "' for appender %s\n", STRING_VIEW_FMT_ARG(tokens[1]), name.c_str());
+        return;
+    }
+
+    if (size > 2)
+    {
+        if (Optional<uint8> flagsVal = Trinity::StringTo<uint8>(tokens[2]))
+            flags = AppenderFlags(*flagsVal);
+        else
+        {
+            fprintf(stderr, "Log::CreateAppenderFromConfig: Unknown flags '" STRING_VIEW_FMT "' for appender %s\n", STRING_VIEW_FMT_ARG(tokens[2]), name.c_str());
+            return;
+        }
     }
 
     try
     {
-        Appender* appender = factoryFunction->second(NextAppenderId(), name, level, flags, std::vector<char const*>(iter, tokens.end()));
+        Appender* appender = factoryFunction->second(NextAppenderId(), std::move(name), level, flags, tokens);
         appenders[appender->getId()].reset(appender);
     }
     catch (InvalidAppenderArgsException const& iaae)
     {
-        fprintf(stderr, "%s", iaae.what());
+        fprintf(stderr, "%s\n", iaae.what());
     }
 }
 
@@ -119,7 +123,6 @@ void Log::CreateLoggerFromConfigLine(std::string const& loggerName, std::string 
         return;
 
     LogLevel level = LOG_LEVEL_DISABLED;
-    uint8 type = uint8(-1);
 
     std::string name = loggerName.substr(7);
 
@@ -129,8 +132,7 @@ void Log::CreateLoggerFromConfigLine(std::string const& loggerName, std::string 
         return;
     }
 
-    Tokenizer tokens(options, ',');
-    Tokenizer::const_iterator iter = tokens.begin();
+    std::vector<std::string_view> tokens = Trinity::Tokenize(options, ',', true);
 
     if (tokens.size() != 2)
     {
@@ -138,40 +140,35 @@ void Log::CreateLoggerFromConfigLine(std::string const& loggerName, std::string 
         return;
     }
 
-    std::unique_ptr<Logger>& logger = loggers[name];
-    if (logger)
+    if (loggers.find(name) != loggers.end())
     {
         fprintf(stderr, "Error while configuring Logger %s. Already defined\n", name.c_str());
         return;
     }
 
-    level = LogLevel(atoi(*iter++));
-    if (level > LOG_LEVEL_FATAL)
+    level = LogLevel(Trinity::StringTo<uint8>(tokens[0]).value_or(LOG_LEVEL_INVALID));
+    if (level > NUM_ENABLED_LOG_LEVELS)
     {
-        fprintf(stderr, "Log::CreateLoggerFromConfig: Wrong Log Level %u for logger %s\n", type, name.c_str());
+        fprintf(stderr, "Log::CreateLoggerFromConfig: Wrong Log Level '" STRING_VIEW_FMT "' for logger %s\n", STRING_VIEW_FMT_ARG(tokens[0]), name.c_str());
         return;
     }
 
     if (level < lowestLogLevel)
         lowestLogLevel = level;
 
-    logger = std::make_unique<Logger>(name, level);
+    Logger* logger = new Logger(name, level);
+    loggers[logger->getName()].reset(logger);
     //fprintf(stdout, "Log::CreateLoggerFromConfig: Created Logger %s, Level %u\n", name.c_str(), level);
 
-    std::istringstream ss(*iter);
-    std::string str;
-
-    ss >> str;
-    while (ss)
+    for (std::string_view appenderName : Trinity::Tokenize(tokens[1], ' ', false))
     {
-        if (Appender* appender = GetAppenderByName(str))
+        if (Appender* appender = GetAppenderByName(appenderName))
         {
-            logger->addAppender(appender->getId(), appender);
+            logger->addAppender(appender);
             //fprintf(stdout, "Log::CreateLoggerFromConfig: Added Appender %s to Logger %s\n", appender->getName().c_str(), name.c_str());
         }
         else
-            fprintf(stderr, "Error while configuring Appender %s in Logger %s. Appender does not exist", str.c_str(), name.c_str());
-        ss >> str;
+            fprintf(stderr, "Error while configuring Appender " STRING_VIEW_FMT " in Logger %s. Appender does not exist\n", STRING_VIEW_FMT_ARG(appenderName), name.c_str());
     }
 }
 
@@ -201,50 +198,50 @@ void Log::ReadLoggersFromConfig()
 
         Close(); // Clean any Logger or Appender created
 
-        AppenderConsole* appender = new AppenderConsole(NextAppenderId(), "Console", LOG_LEVEL_DEBUG, APPENDER_FLAGS_NONE, std::vector<char const*>());
+        AppenderConsole* appender = new AppenderConsole(NextAppenderId(), "Console", LOG_LEVEL_DEBUG, APPENDER_FLAGS_NONE, {});
         appenders[appender->getId()].reset(appender);
 
         Logger* rootLogger = new Logger(LOGGER_ROOT, LOG_LEVEL_ERROR);
-        rootLogger->addAppender(appender->getId(), appender);
-        loggers[LOGGER_ROOT].reset(rootLogger);
+        rootLogger->addAppender(appender);
+        loggers[rootLogger->getName()].reset(rootLogger);
 
         Logger* serverLogger = new Logger("server", LOG_LEVEL_INFO);
-        serverLogger->addAppender(appender->getId(), appender);
-        loggers["server"].reset(serverLogger);
+        serverLogger->addAppender(appender);
+        loggers[serverLogger->getName()].reset(serverLogger);
     }
 }
 
 void Log::RegisterAppender(uint8 index, AppenderCreatorFn appenderCreateFn)
 {
-    auto itr = appenderFactory.find(index);
-    ASSERT(itr == appenderFactory.end());
-    appenderFactory[index] = appenderCreateFn;
+    [[maybe_unused]] bool isNewAppender = appenderFactory.try_emplace(index, appenderCreateFn).second;
+    ASSERT(isNewAppender);
 }
 
-void Log::outMessage(std::string const& filter, LogLevel level, std::string&& message)
+void Log::OutMessageImpl(Logger const* logger, std::string_view filter, LogLevel level, Trinity::FormatStringView messageFormat, Trinity::FormatArgs messageFormatArgs) const noexcept
 {
-    write(std::make_unique<LogMessage>(level, filter, std::move(message)));
+    if (_ioContext)
+        Trinity::Asio::post(*_strand, LogOperation(logger, new LogMessage(level, filter, Trinity::StringVFormat(messageFormat, messageFormatArgs))));
+    else
+    {
+        LogMessage msg(level, filter, Trinity::StringVFormat(messageFormat, messageFormatArgs));
+        logger->write(&msg);
+    }
 }
 
-void Log::outCommand(std::string&& message, std::string&& param1)
+void Log::OutCommandImpl(uint32 account, Trinity::FormatStringView messageFormat, Trinity::FormatArgs messageFormatArgs) const noexcept
 {
-    write(std::make_unique<LogMessage>(LOG_LEVEL_INFO, "commands.gm", std::move(message), std::move(param1)));
-}
-
-void Log::write(std::unique_ptr<LogMessage>&& msg) const
-{
-    Logger const* logger = GetLoggerByType(msg->type);
+    Logger const* logger = GetLoggerByType("commands.gm");
 
     if (_ioContext)
-    {
-        std::shared_ptr<LogOperation> logOperation = std::make_shared<LogOperation>(logger, std::move(msg));
-        Trinity::Asio::post(*_ioContext, Trinity::Asio::bind_executor(*_strand, [logOperation]() { logOperation->call(); }));
-    }
+        Trinity::Asio::post(*_strand, LogOperation(logger, new LogMessage(LOG_LEVEL_INFO, "commands.gm", Trinity::StringVFormat(messageFormat, messageFormatArgs), Trinity::ToString(account))));
     else
-        logger->write(msg.get());
+    {
+        LogMessage msg(LOG_LEVEL_INFO, "commands.gm", Trinity::StringVFormat(messageFormat, messageFormatArgs), Trinity::ToString(account));
+        logger->write(&msg);
+    }
 }
 
-Logger const* Log::GetLoggerByType(std::string const& type) const
+Logger const* Log::GetLoggerByType(std::string_view type) const
 {
     auto it = loggers.find(type);
     if (it != loggers.end())
@@ -253,7 +250,7 @@ Logger const* Log::GetLoggerByType(std::string const& type) const
     if (type == LOGGER_ROOT)
         return nullptr;
 
-    std::string parentLogger = LOGGER_ROOT;
+    std::string_view parentLogger = LOGGER_ROOT;
     size_t found = type.find_last_of('.');
     if (found != std::string::npos)
         parentLogger = type.substr(0, found);
@@ -263,28 +260,7 @@ Logger const* Log::GetLoggerByType(std::string const& type) const
 
 std::string Log::GetTimestampStr()
 {
-    time_t tt = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-
-    std::tm aTm;
-    localtime_r(&tt, &aTm);
-
-    //       YYYY   year
-    //       MM     month (2 digits 01-12)
-    //       DD     day (2 digits 01-31)
-    //       HH     hour (2 digits 00-23)
-    //       MM     minutes (2 digits 00-59)
-    //       SS     seconds (2 digits 00-59)
-    try
-    {
-        return Trinity::StringFormat("%04d-%02d-%02d_%02d-%02d-%02d",
-            aTm.tm_year + 1900, aTm.tm_mon + 1, aTm.tm_mday, aTm.tm_hour, aTm.tm_min, aTm.tm_sec);
-    }
-    catch (std::exception const& ex)
-    {
-        fprintf(stderr, "Failed to initialize timestamp part of log filename! %s", ex.what());
-        fflush(stderr);
-        ABORT();
-    }
+    return TimeToTimestampStr(time(nullptr));
 }
 
 bool Log::SetLogLevel(std::string const& name, int32 newLeveli, bool isLogger /* = true */)
@@ -320,22 +296,23 @@ bool Log::SetLogLevel(std::string const& name, int32 newLeveli, bool isLogger /*
     return true;
 }
 
-void Log::outCharDump(char const* str, uint32 accountId, uint64 guid, char const* name)
+void Log::OutCharDump(std::string const& str, uint32 accountId, uint64 guid, std::string const& name) const noexcept
 {
-    if (!str || !ShouldLog("entities.player.dump", LOG_LEVEL_INFO))
+    if (!ShouldLog("entities.player.dump", LOG_LEVEL_INFO))
         return;
 
-    std::ostringstream ss;
-    ss << "== START DUMP == (account: " << accountId << " guid: " << guid << " name: " << name
-       << ")\n" << str << "\n== END DUMP ==\n";
+    std::string ss = Trinity::StringFormat("== START DUMP == (account: {} guid: {} name: {})\n{}\n== END DUMP ==\n", accountId, guid, name, str);
+    std::string param = Trinity::StringFormat("{}_{}", guid, name);
 
-    std::unique_ptr<LogMessage> msg(new LogMessage(LOG_LEVEL_INFO, "entities.player.dump", ss.str()));
-    std::ostringstream param;
-    param << guid << '_' << name;
+    Logger const* logger = GetLoggerByType("entities.player.dump");
 
-    msg->param1 = param.str();
-
-    write(std::move(msg));
+    if (_ioContext)
+        Trinity::Asio::post(*_strand, LogOperation(logger, new LogMessage(LOG_LEVEL_INFO, "entities.player.dump", std::move(ss), std::move(param))));
+    else
+    {
+        LogMessage msg(LOG_LEVEL_INFO, "entities.player.dump", std::move(ss), std::move(param));
+        logger->write(&msg);
+    }
 }
 
 void Log::SetRealmId(uint32 id)
@@ -350,7 +327,7 @@ void Log::Close()
     appenders.clear();
 }
 
-bool Log::ShouldLog(std::string const& type, LogLevel level) const
+bool Log::ShouldLog(std::string_view type, LogLevel level) const noexcept
 {
     // TODO: Use cache to store "Type.sub1.sub2": "Type" equivalence, should
     // Speed up in cases where requesting "Type.sub1.sub2" but only configured
@@ -368,7 +345,21 @@ bool Log::ShouldLog(std::string const& type, LogLevel level) const
     return logLevel != LOG_LEVEL_DISABLED && logLevel <= level;
 }
 
-Log* Log::instance()
+Logger const* Log::GetEnabledLogger(std::string_view type, LogLevel level) const noexcept
+{
+    // Don't even look for a logger if the LogLevel is lower than lowest log levels across all loggers
+    if (level < lowestLogLevel)
+        return nullptr;
+
+    Logger const* logger = GetLoggerByType(type);
+    if (!logger)
+        return nullptr;
+
+    LogLevel logLevel = logger->getLogLevel();
+    return logLevel != LOG_LEVEL_DISABLED && logLevel <= level ? logger : nullptr;
+}
+
+Log* Log::instance() noexcept
 {
     static Log instance;
     return &instance;
@@ -376,13 +367,17 @@ Log* Log::instance()
 
 void Log::Initialize(Trinity::Asio::IoContext* ioContext)
 {
+    SetAsynchronous(ioContext);
+    LoadFromConfig();
+}
+
+void Log::SetAsynchronous(Trinity::Asio::IoContext* ioContext)
+{
     if (ioContext)
     {
         _ioContext = ioContext;
         _strand = new Trinity::Asio::Strand(*ioContext);
     }
-
-    LoadFromConfig();
 }
 
 void Log::SetSynchronous()

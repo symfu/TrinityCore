@@ -26,14 +26,18 @@
 
 void WorldSession::HandleMoveDismissVehicle(WorldPackets::Vehicle::MoveDismissVehicle& moveDismissVehicle)
 {
-    ObjectGuid vehicleGUID = _player->GetCharmedGUID();
-    if (vehicleGUID.IsEmpty())
+    Unit* mover = ValidateAndGetUnitBeingMoved(moveDismissVehicle.Status.guid, moveDismissVehicle.GetOpcode(), false);
+    if (!ValidateMovementInfo(mover, &moveDismissVehicle.Status))
         return;
 
-    _player->ValidateMovementInfo(&moveDismissVehicle.Status);
-    _player->m_movementInfo = moveDismissVehicle.Status;
+    moveDismissVehicle.Status.time = AdjustClientMovementTime(moveDismissVehicle.Status.time);
+    mover->m_movementInfo = moveDismissVehicle.Status;
 
-    _player->ExitVehicle();
+    if (Unit* vehicleBase = _player->GetVehicleBase())
+    {
+        vehicleBase->SendPetDismissSound();
+        _player->ExitVehicle();
+    }
 }
 
 void WorldSession::HandleRequestVehiclePrevSeat(WorldPackets::Vehicle::RequestVehiclePrevSeat& /*requestVehiclePrevSeat*/)
@@ -45,8 +49,8 @@ void WorldSession::HandleRequestVehiclePrevSeat(WorldPackets::Vehicle::RequestVe
     VehicleSeatEntry const* seat = GetPlayer()->GetVehicle()->GetSeatForPassenger(GetPlayer());
     if (!seat->CanSwitchFromSeat())
     {
-        TC_LOG_ERROR("network", "HandleRequestVehiclePrevSeat: %s tried to switch seats but current seatflags %u don't permit that.",
-            GetPlayer()->GetGUID().ToString().c_str(), seat->Flags);
+        TC_LOG_ERROR("network", "HandleRequestVehiclePrevSeat: {} tried to switch seats but current seatflags {} don't permit that.",
+            GetPlayer()->GetGUID().ToString(), seat->Flags);
         return;
     }
 
@@ -62,8 +66,8 @@ void WorldSession::HandleRequestVehicleNextSeat(WorldPackets::Vehicle::RequestVe
     VehicleSeatEntry const* seat = GetPlayer()->GetVehicle()->GetSeatForPassenger(GetPlayer());
     if (!seat->CanSwitchFromSeat())
     {
-        TC_LOG_ERROR("network", "HandleRequestVehicleNextSeat: %s tried to switch seats but current seatflags %u don't permit that.",
-            GetPlayer()->GetGUID().ToString().c_str(), seat->Flags);
+        TC_LOG_ERROR("network", "HandleRequestVehicleNextSeat: {} tried to switch seats but current seatflags {} don't permit that.",
+            GetPlayer()->GetGUID().ToString(), seat->Flags);
         return;
     }
 
@@ -72,24 +76,26 @@ void WorldSession::HandleRequestVehicleNextSeat(WorldPackets::Vehicle::RequestVe
 
 void WorldSession::HandleMoveChangeVehicleSeats(WorldPackets::Vehicle::MoveChangeVehicleSeats& moveChangeVehicleSeats)
 {
-    Unit* vehicle_base = GetPlayer()->GetVehicleBase();
-    if (!vehicle_base)
+    Unit* mover = ValidateAndGetUnitBeingMoved(moveChangeVehicleSeats.Status.guid, moveChangeVehicleSeats.GetOpcode(), false);
+    if (!mover)
         return;
 
-    VehicleSeatEntry const* seat = GetPlayer()->GetVehicle()->GetSeatForPassenger(GetPlayer());
+    Vehicle* vehicle = GetPlayer()->GetVehicle();
+    if (!vehicle)
+        return;
+
+    VehicleSeatEntry const* seat = vehicle->GetSeatForPassenger(GetPlayer());
     if (!seat->CanSwitchFromSeat())
     {
-        TC_LOG_ERROR("network", "HandleMoveChangeVehicleSeats: Player %s tried to switch seats but current seatflags %u don't permit that.",
-            GetPlayer()->GetGUID().ToString().c_str(), seat->Flags);
+        TC_LOG_ERROR("network", "HandleMoveChangeVehicleSeats: Player {} tried to switch seats but current seatflags {} don't permit that.",
+            GetPlayer()->GetGUID().ToString(), seat->Flags);
         return;
     }
 
-    GetPlayer()->ValidateMovementInfo(&moveChangeVehicleSeats.Status);
-
-    if (vehicle_base->GetGUID() != moveChangeVehicleSeats.Status.guid)
+    if (!ValidateMovementInfo(mover, &moveChangeVehicleSeats.Status))
         return;
 
-    vehicle_base->m_movementInfo = moveChangeVehicleSeats.Status;
+    mover->m_movementInfo = moveChangeVehicleSeats.Status;
 
     if (moveChangeVehicleSeats.DstVehicle.IsEmpty())
         GetPlayer()->ChangeSeat(-1, moveChangeVehicleSeats.DstSeatIndex != 255);
@@ -108,8 +114,8 @@ void WorldSession::HandleRequestVehicleSwitchSeat(WorldPackets::Vehicle::Request
     VehicleSeatEntry const* seat = GetPlayer()->GetVehicle()->GetSeatForPassenger(GetPlayer());
     if (!seat->CanSwitchFromSeat())
     {
-        TC_LOG_ERROR("network", "HandleRequestVehicleSwitchSeat: %s tried to switch seats but current seatflags %u don't permit that.",
-            GetPlayer()->GetGUID().ToString().c_str(), seat->Flags);
+        TC_LOG_ERROR("network", "HandleRequestVehicleSwitchSeat: {} tried to switch seats but current seatflags {} don't permit that.",
+            GetPlayer()->GetGUID().ToString(), seat->Flags);
         return;
     }
 
@@ -144,7 +150,7 @@ void WorldSession::HandleEjectPassenger(WorldPackets::Vehicle::EjectPassenger& e
     Vehicle* vehicle = _player->GetVehicleKit();
     if (!vehicle)
     {
-        TC_LOG_ERROR("network", "HandleEjectPassenger: %s is not in a vehicle!", GetPlayer()->GetGUID().ToString().c_str());
+        TC_LOG_ERROR("network", "HandleEjectPassenger: {} is not in a vehicle!", GetPlayer()->GetGUID().ToString());
         return;
     }
 
@@ -153,13 +159,13 @@ void WorldSession::HandleEjectPassenger(WorldPackets::Vehicle::EjectPassenger& e
         Unit* unit = ObjectAccessor::GetUnit(*_player, ejectPassenger.Passenger);
         if (!unit) // creatures can be ejected too from player mounts
         {
-            TC_LOG_ERROR("network", "%s tried to eject %s from vehicle, but the latter was not found in world!", GetPlayer()->GetGUID().ToString().c_str(), ejectPassenger.Passenger.ToString().c_str());
+            TC_LOG_ERROR("network", "{} tried to eject {} from vehicle, but the latter was not found in world!", GetPlayer()->GetGUID().ToString(), ejectPassenger.Passenger.ToString());
             return;
         }
 
         if (!unit->IsOnVehicle(vehicle->GetBase()))
         {
-            TC_LOG_ERROR("network", "%s tried to eject %s, but they are not in the same vehicle", GetPlayer()->GetGUID().ToString().c_str(), ejectPassenger.Passenger.ToString().c_str());
+            TC_LOG_ERROR("network", "{} tried to eject {}, but they are not in the same vehicle", GetPlayer()->GetGUID().ToString(), ejectPassenger.Passenger.ToString());
             return;
         }
 
@@ -168,10 +174,10 @@ void WorldSession::HandleEjectPassenger(WorldPackets::Vehicle::EjectPassenger& e
         if (seat->IsEjectable())
             unit->ExitVehicle();
         else
-            TC_LOG_ERROR("network", "Player %s attempted to eject %s from non-ejectable seat.", GetPlayer()->GetGUID().ToString().c_str(), ejectPassenger.Passenger.ToString().c_str());
+            TC_LOG_ERROR("network", "Player {} attempted to eject {} from non-ejectable seat.", GetPlayer()->GetGUID().ToString(), ejectPassenger.Passenger.ToString());
     }
     else
-        TC_LOG_ERROR("network", "HandleEjectPassenger: %s tried to eject invalid %s ", GetPlayer()->GetGUID().ToString().c_str(), ejectPassenger.Passenger.ToString().c_str());
+        TC_LOG_ERROR("network", "HandleEjectPassenger: {} tried to eject invalid {} ", GetPlayer()->GetGUID().ToString(), ejectPassenger.Passenger.ToString());
 }
 
 void WorldSession::HandleRequestVehicleExit(WorldPackets::Vehicle::RequestVehicleExit& /*requestVehicleExit*/)
@@ -184,13 +190,17 @@ void WorldSession::HandleRequestVehicleExit(WorldPackets::Vehicle::RequestVehicl
             if (itr->second.SeatInfo->CanEnterOrExit())
                 GetPlayer()->ExitVehicle();
             else
-                TC_LOG_ERROR("network", "Player %s tried to exit vehicle, but seatflags %u (ID: %u) don't permit that.",
-                    GetPlayer()->GetGUID().ToString().c_str(), vehicle->GetVehicleInfo()->SeatID[itr->first], itr->second.SeatInfo->Flags);
+                TC_LOG_ERROR("network", "Player {} tried to exit vehicle, but seatflags {} (ID: {}) don't permit that.",
+                    GetPlayer()->GetGUID().ToString(), vehicle->GetVehicleInfo()->SeatID[itr->first], itr->second.SeatInfo->Flags);
         }
     }
 }
 
 void WorldSession::HandleMoveSetVehicleRecAck(WorldPackets::Vehicle::MoveSetVehicleRecIdAck& setVehicleRecIdAck)
 {
-    GetPlayer()->ValidateMovementInfo(&setVehicleRecIdAck.Data.Status);
+    Unit* mover = ValidateAndGetUnitBeingMoved(setVehicleRecIdAck.Data.Status.guid, setVehicleRecIdAck.GetOpcode(), true);
+    if (!mover)
+        return;
+
+    ValidateMovementInfo(mover, &setVehicleRecIdAck.Data.Status);
 }

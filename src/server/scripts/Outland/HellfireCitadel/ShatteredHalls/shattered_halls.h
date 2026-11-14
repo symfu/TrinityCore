@@ -22,7 +22,7 @@
 #include "Position.h"
 
 #define SHScriptName "instance_shattered_halls"
-#define DataHeader "SH"
+#define DataHeader "SHv1"
 
 uint32 const EncounterCount          = 4;
 uint32 const VictimCount             = 3;
@@ -30,23 +30,32 @@ uint32 const VictimCount             = 3;
 enum SHDataTypes
 {
     DATA_NETHEKURSE                  = 0,
-    DATA_OMROGG                      = 1,
-    DATA_KARGATH                     = 2,
+    DATA_PORUNG                      = 1,
+    DATA_OMROGG                      = 2,
+    DATA_KARGATH                     = 3,
 
-    DATA_SHATTERED_EXECUTIONER       = 3,
-    DATA_PRISONERS_EXECUTED          = 4,
+    DATA_SHATTERED_EXECUTIONER       = 4,
+    DATA_PRISONERS_EXECUTED          = 5,
 
-    DATA_TEAM_IN_INSTANCE            = 5,
+    DATA_TEAM_IN_INSTANCE            = 6,
 
     DATA_FIRST_PRISONER,
     DATA_SECOND_PRISONER,
-    DATA_THIRD_PRISONER
+    DATA_THIRD_PRISONER,
+
+    DATA_LEFT_HEAD,
+    DATA_RIGHT_HEAD
 };
 
 enum SHCreatureIds
 {
     NPC_GRAND_WARLOCK_NETHEKURSE     = 16807,
+    NPC_BLOOD_GUARD_PORUNG           = 20923,
     NPC_KARGATH_BLADEFIST            = 16808,
+
+    // Warbringer O'mrogg
+    NPC_LEFT_HEAD                    = 19523,
+    NPC_RIGHT_HEAD                   = 19524,
 
     NPC_SHATTERED_EXECUTIONER        = 17301,
 
@@ -118,5 +127,8 @@ inline AI* GetShatteredHallsAI(T* obj)
 {
     return GetInstanceAI<AI>(obj, SHScriptName);
 }
+
+#define RegisterShatteredHallsCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetShatteredHallsAI)
+#define RegisterShatteredHallsGameObjectAI(ai_name) RegisterGameObjectAIWithFactory(ai_name, GetShatteredHallsAI)
 
 #endif

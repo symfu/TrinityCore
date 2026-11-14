@@ -17,6 +17,7 @@
 
 #include "ScriptMgr.h"
 #include "CombatAI.h"
+#include "DB2Stores.h"
 #include "Map.h"
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
@@ -24,143 +25,14 @@
 #include "Player.h"
 #include "ScriptedEscortAI.h"
 #include "SpellAuras.h"
+#include "SpellInfo.h"
 #include "SpellScript.h"
 #include "Vehicle.h"
-
-/*######
-## npc_engineer_helice
-######*/
-
-enum EngineerHelice
-{
-    // Spells
-    SPELL_EXPLODE_CRYSTAL       = 62487,
-    SPELL_FLAMES                = 64561,
-
-    // Yells
-    SAY_WP_1                    = 0,
-    SAY_WP_2                    = 1,
-    SAY_WP_3                    = 2,
-    SAY_WP_4                    = 3,
-    SAY_WP_5                    = 4,
-    SAY_WP_6                    = 5,
-    SAY_WP_7                    = 6,
-
-    // Quests
-    QUEST_DISASTER              = 12688
-};
-
-class npc_engineer_helice : public CreatureScript
-{
-public:
-    npc_engineer_helice() : CreatureScript("npc_engineer_helice") { }
-
-    struct npc_engineer_heliceAI : public EscortAI
-    {
-        npc_engineer_heliceAI(Creature* creature) : EscortAI(creature)
-        {
-            Initialize();
-        }
-
-        void Initialize()
-        {
-            m_uiChatTimer = 4000;
-        }
-
-        uint32 m_uiChatTimer;
-
-        void WaypointReached(uint32 waypointId, uint32 /*pathId*/) override
-        {
-            Player* player = GetPlayerForEscort();
-
-            switch (waypointId)
-            {
-                case 0:
-                    Talk(SAY_WP_2);
-                    break;
-                case 1:
-                    Talk(SAY_WP_3);
-                    me->CastSpell(Position{ 5918.33f, 5372.91f, -98.770f }, SPELL_EXPLODE_CRYSTAL, true);
-                    me->SummonGameObject(184743, 5918.33f, 5372.91f, -98.770f, 0, QuaternionData(), 3s, GO_SUMMON_TIMED_DESPAWN);
-                    me->HandleEmoteCommand(EMOTE_ONESHOT_LAUGH);
-                    break;
-                case 2:
-                    Talk(SAY_WP_4);
-                    break;
-                case 7:
-                    Talk(SAY_WP_5);
-                    break;
-                case 8:
-                    me->CastSpell(Position{ 5887.37f, 5379.39f, -91.289f }, SPELL_EXPLODE_CRYSTAL, true);
-                    me->SummonGameObject(184743, 5887.37f, 5379.39f, -91.289f, 0, QuaternionData(), 3s, GO_SUMMON_TIMED_DESPAWN);
-                    me->HandleEmoteCommand(EMOTE_ONESHOT_LAUGH);
-                    break;
-                case 9:
-                    Talk(SAY_WP_6);
-                    break;
-                case 13:
-                    if (player)
-                    {
-                        player->GroupEventHappens(QUEST_DISASTER, me);
-                        Talk(SAY_WP_7);
-                    }
-                    break;
-            }
-        }
-
-        void Reset() override
-        {
-            Initialize();
-        }
-
-        void JustDied(Unit* /*killer*/) override
-        {
-            if (HasEscortState(STATE_ESCORT_ESCORTING))
-            {
-                if (Player* player = GetPlayerForEscort())
-                    player->FailQuest(QUEST_DISASTER);
-            }
-        }
-
-        void UpdateAI(uint32 uiDiff) override
-        {
-            EscortAI::UpdateAI(uiDiff);
-
-            if (HasEscortState(STATE_ESCORT_ESCORTING))
-            {
-                if (m_uiChatTimer <= uiDiff)
-                {
-                    m_uiChatTimer = 12000;
-                }
-                else
-                    m_uiChatTimer -= uiDiff;
-            }
-        }
-
-        void QuestAccept(Player* player, Quest const* quest) override
-        {
-            if (quest->GetQuestId() == QUEST_DISASTER)
-            {
-                me->GetMotionMaster()->MoveJumpTo(0, 0.4f, 0.4f);
-                me->SetFaction(FACTION_ESCORTEE_N_NEUTRAL_PASSIVE);
-
-                Start(false, false, player->GetGUID());
-                Talk(SAY_WP_1);
-            }
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_engineer_heliceAI(creature);
-    }
-};
+#include "GameObject.h"
 
 /*#####
 ## npc_jungle_punch_target
 #####*/
-
-#define SAY_OFFER     "Care to try Grimbooze Thunderbrew's new jungle punch?"
 
 enum JunglePunch
 {
@@ -191,247 +63,190 @@ enum NesingwaryChildrensWeek
     TEXT_WOLVAR_ORPHAN_9                = 9
 };
 
-class npc_jungle_punch_target : public CreatureScript
+struct npc_jungle_punch_target : public ScriptedAI
 {
-public:
-    npc_jungle_punch_target() : CreatureScript("npc_jungle_punch_target") { }
-
-    struct npc_jungle_punch_targetAI : public ScriptedAI
+    npc_jungle_punch_target(Creature* creature) : ScriptedAI(creature)
     {
-        npc_jungle_punch_targetAI(Creature* creature) : ScriptedAI(creature)
-        {
-            Initialize();
-        }
+        Initialize();
+    }
 
-        void Initialize()
-        {
-            sayTimer = 3500;
-            sayStep = 0;
-            timer = 0;
-            phase = 0;
-            playerGUID.Clear();
-            orphanGUID.Clear();
-        }
+    void Initialize()
+    {
+        sayTimer = 3500;
+        sayStep = 0;
+        timer = 0;
+        phase = 0;
+        playerGUID.Clear();
+        orphanGUID.Clear();
+    }
 
-        void Reset() override
-        {
-            Initialize();
-        }
+    void Reset() override
+    {
+        Initialize();
+    }
 
-        void MoveInLineOfSight(Unit* who) override
-        {
-            if (!phase && who && who->GetDistance2d(me) < 10.0f)
-                if (Player* player = who->ToPlayer())
-                    if (player->GetQuestStatus(QUEST_THE_MIGHTY_HEMET_NESINGWARY) == QUEST_STATUS_INCOMPLETE)
-                    {
-                        playerGUID = player->GetGUID();
-                        if (Aura* orphanOut = player->GetAura(SPELL_ORPHAN_OUT))
-                            if (orphanOut->GetCaster() && orphanOut->GetCaster()->GetEntry() == ORPHAN_WOLVAR)
-                            {
-                                orphanGUID = orphanOut->GetCaster()->GetGUID();
-                                phase = 1;
-                            }
-                    }
-        }
-
-        void proceedCwEvent(const uint32 diff)
-        {
-            if (timer <= diff)
-            {
-                Player* player = ObjectAccessor::GetPlayer(*me, playerGUID);
-                Creature* orphan = ObjectAccessor::GetCreature(*me, orphanGUID);
-
-                if (!orphan || !player)
+    void MoveInLineOfSight(Unit* who) override
+    {
+        if (!phase && who && who->GetDistance2d(me) < 10.0f)
+            if (Player* player = who->ToPlayer())
+                if (player->GetQuestStatus(QUEST_THE_MIGHTY_HEMET_NESINGWARY) == QUEST_STATUS_INCOMPLETE)
                 {
+                    playerGUID = player->GetGUID();
+                    if (Aura* orphanOut = player->GetAura(SPELL_ORPHAN_OUT))
+                        if (orphanOut->GetCaster() && orphanOut->GetCaster()->GetEntry() == ORPHAN_WOLVAR)
+                        {
+                            orphanGUID = orphanOut->GetCaster()->GetGUID();
+                            phase = 1;
+                        }
+                }
+    }
+
+    void proceedCwEvent(const uint32 diff)
+    {
+        if (timer <= diff)
+        {
+            Player* player = ObjectAccessor::GetPlayer(*me, playerGUID);
+            Creature* orphan = ObjectAccessor::GetCreature(*me, orphanGUID);
+
+            if (!orphan || !player)
+            {
+                Reset();
+                return;
+            }
+
+            switch (phase)
+            {
+                case 1:
+                    orphan->GetMotionMaster()->MovePoint(0, me->GetPositionX() + std::cos(me->GetOrientation()) * 5, me->GetPositionY() + std::sin(me->GetOrientation()) * 5, me->GetPositionZ());
+                    orphan->AI()->Talk(TEXT_WOLVAR_ORPHAN_6);
+                    timer = 5000;
+                    break;
+                case 2:
+                    orphan->SetFacingToObject(me);
+                    orphan->AI()->Talk(TEXT_WOLVAR_ORPHAN_7);
+                    timer = 5000;
+                    break;
+                case 3:
+                    Talk(TEXT_NESINGWARY_1);
+                    timer = 5000;
+                    break;
+                case 4:
+                    orphan->AI()->Talk(TEXT_WOLVAR_ORPHAN_8);
+                    timer = 5000;
+                    break;
+                case 5:
+                    orphan->AI()->Talk(TEXT_WOLVAR_ORPHAN_9);
+                    timer = 5000;
+                    break;
+                case 6:
+                    orphan->GetMotionMaster()->MoveFollow(player, PET_FOLLOW_DIST, PET_FOLLOW_ANGLE);
+                    player->GroupEventHappens(QUEST_THE_MIGHTY_HEMET_NESINGWARY, me);
                     Reset();
                     return;
-                }
-
-                switch (phase)
-                {
-                    case 1:
-                        orphan->GetMotionMaster()->MovePoint(0, me->GetPositionX() + std::cos(me->GetOrientation()) * 5, me->GetPositionY() + std::sin(me->GetOrientation()) * 5, me->GetPositionZ());
-                        orphan->AI()->Talk(TEXT_WOLVAR_ORPHAN_6);
-                        timer = 5000;
-                        break;
-                    case 2:
-                        orphan->SetFacingToObject(me);
-                        orphan->AI()->Talk(TEXT_WOLVAR_ORPHAN_7);
-                        timer = 5000;
-                        break;
-                    case 3:
-                        Talk(TEXT_NESINGWARY_1);
-                        timer = 5000;
-                        break;
-                    case 4:
-                        orphan->AI()->Talk(TEXT_WOLVAR_ORPHAN_8);
-                        timer = 5000;
-                        break;
-                    case 5:
-                        orphan->AI()->Talk(TEXT_WOLVAR_ORPHAN_9);
-                        timer = 5000;
-                        break;
-                    case 6:
-                        orphan->GetMotionMaster()->MoveFollow(player, PET_FOLLOW_DIST, PET_FOLLOW_ANGLE);
-                        player->GroupEventHappens(QUEST_THE_MIGHTY_HEMET_NESINGWARY, me);
-                        Reset();
-                        return;
-                }
-                ++phase;
             }
-            else
-                timer -= diff;
+            ++phase;
         }
-
-        void UpdateAI(uint32 diff) override
-        {
-            if (phase)
-                proceedCwEvent(diff);
-
-            if (!sayStep)
-                return;
-
-            if (sayTimer < diff)
-            {
-                Talk(SAY_HEMET_HADRIUS_TAMARA_1 + sayStep - 1);
-                sayTimer = 3000;
-                sayStep++;
-
-                if (sayStep > 3) // end
-                    sayStep = 0;
-            }
-            else
-                sayTimer -= diff;
-        }
-
-        void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
-        {
-            if (spellInfo->Id != SPELL_OFFER)
-                return;
-
-            Player* player = caster->ToPlayer();
-            if (!player)
-                return;
-
-            Quest const* quest = sObjectMgr->GetQuestTemplate(QUEST_TASTE_TEST);
-            if (!quest)
-                return;
-
-            if (player->GetQuestStatus(QUEST_TASTE_TEST) != QUEST_STATUS_INCOMPLETE)
-                return;
-
-            for (uint32 i = 0; i < quest->Objectives.size(); ++i)
-            {
-                if (uint32(quest->Objectives[i].ObjectID) != me->GetEntry())
-                    continue;
-
-                if (player->GetQuestObjectiveData(quest->Objectives[i]) != 0)
-                    continue;
-
-                player->KilledMonsterCredit(me->GetEntry());
-                player->Say(SAY_OFFER, LANG_UNIVERSAL);
-                sayStep = 1;
-                break;
-            }
-        }
-
-        private:
-            uint16 sayTimer;
-            uint8 sayStep;
-            uint32 timer;
-            int8 phase;
-            ObjectGuid playerGUID;
-            ObjectGuid orphanGUID;
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_jungle_punch_targetAI(creature);
+        else
+            timer -= diff;
     }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (phase)
+            proceedCwEvent(diff);
+
+        if (!sayStep)
+            return;
+
+        if (sayTimer < diff)
+        {
+            Talk(SAY_HEMET_HADRIUS_TAMARA_1 + sayStep - 1);
+            sayTimer = 3000;
+            sayStep++;
+
+            if (sayStep > 3) // end
+                sayStep = 0;
+        }
+        else
+            sayTimer -= diff;
+    }
+
+    void SpellHit(WorldObject* caster, SpellInfo const* spellInfo) override
+    {
+        if (spellInfo->Id != SPELL_OFFER)
+            return;
+
+        Player* player = caster->ToPlayer();
+        if (!player)
+            return;
+
+        Quest const* quest = sObjectMgr->GetQuestTemplate(QUEST_TASTE_TEST);
+        if (!quest)
+            return;
+
+        if (player->GetQuestStatus(QUEST_TASTE_TEST) != QUEST_STATUS_INCOMPLETE)
+            return;
+
+        for (uint32 i = 0; i < quest->Objectives.size(); ++i)
+        {
+            if (uint32(quest->Objectives[i].ObjectID) != me->GetEntry())
+                continue;
+
+            if (player->GetQuestObjectiveData(quest->Objectives[i]) != 0)
+                continue;
+
+            player->KilledMonsterCredit(me->GetEntry());
+            sayStep = 1;
+            break;
+        }
+    }
+
+private:
+    uint16 sayTimer;
+    uint8 sayStep;
+    uint32 timer;
+    int8 phase;
+    ObjectGuid playerGUID;
+    ObjectGuid orphanGUID;
 };
 
 /*######
-## Quest The Lifewarden's Wrath
+## Quest: Song of Wind and Water ID: 12726
 ######*/
-
-enum MiscLifewarden
+/*This quest precisly needs core script since battle vehicles are not well integrated with SAI,
+may be easily converted to SAI when they get.*/
+enum SongOfWindAndWater
 {
-    NPC_PRESENCE                 = 28563, // Freya's Presence
-    NPC_SABOTEUR                 = 28538, // Cultist Saboteur
-    NPC_SERVANT                  = 28320, // Servant of Freya
-
-    WHISPER_ACTIVATE             = 0,
-
-    SPELL_FREYA_DUMMY            = 51318,
-    SPELL_LIFEFORCE              = 51395,
-    SPELL_FREYA_DUMMY_TRIGGER    = 51335,
-    SPELL_LASHER_EMERGE          = 48195,
-    SPELL_WILD_GROWTH            = 52948,
+    // Spells
+    SPELL_DEVOUR_WIND     = 52862,
+    SPELL_DEVOUR_WATER    = 52864,
+    // NPCs
+    NPC_HAIPHOON_WATER    = 28999,
+    NPC_HAIPHOON_AIR      = 28985
 };
 
-class spell_q12620_the_lifewarden_wrath : public SpellScriptLoader
+struct npc_haiphoon : public VehicleAI
 {
-public:
-    spell_q12620_the_lifewarden_wrath() : SpellScriptLoader("spell_q12620_the_lifewarden_wrath") { }
+    npc_haiphoon(Creature* creature) : VehicleAI(creature) { }
 
-    class spell_q12620_the_lifewarden_wrath_SpellScript : public SpellScript
+    void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
     {
-        PrepareSpellScript(spell_q12620_the_lifewarden_wrath_SpellScript);
+        if (target == me)
+            return;
 
-        void HandleSendEvent(SpellEffIndex effIndex)
+        if (spellInfo->Id == SPELL_DEVOUR_WIND && me->GetCharmerOrOwnerPlayerOrPlayerItself())
         {
-            PreventHitDefaultEffect(effIndex);
-
-            if (Unit* caster = GetCaster())
-            {
-                if (Creature* presence = caster->FindNearestCreature(NPC_PRESENCE, 50.0f))
-                {
-                    presence->AI()->Talk(WHISPER_ACTIVATE, caster);
-                    presence->CastSpell(presence, SPELL_FREYA_DUMMY, true); // will target plants
-                    // Freya Dummy could be scripted with the following code
-
-                    // Revive plants
-                    std::list<Creature*> servants;
-                    GetCaster()->GetCreatureListWithEntryInGrid(servants, NPC_SERVANT, 200.0f);
-                    for (std::list<Creature*>::iterator itr = servants.begin(); itr != servants.end(); ++itr)
-                    {
-                        // Couldn't find a spell that does this
-                        if ((*itr)->isDead())
-                            (*itr)->Respawn(true);
-
-                        (*itr)->CastSpell(*itr, SPELL_FREYA_DUMMY_TRIGGER, true);
-                        (*itr)->CastSpell(*itr, SPELL_LASHER_EMERGE, false);
-                        (*itr)->CastSpell(*itr, SPELL_WILD_GROWTH, false);
-
-                        if (Unit* target = (*itr)->SelectNearestTarget(150.0f))
-                            (*itr)->AI()->AttackStart(target);
-                    }
-
-                    // Kill nearby enemies
-                    std::list<Creature*> saboteurs;
-                    caster->GetCreatureListWithEntryInGrid(saboteurs, NPC_SABOTEUR, 200.0f);
-                    for (std::list<Creature*>::iterator itr = saboteurs.begin(); itr != saboteurs.end(); ++itr)
-                        if ((*itr)->IsAlive())
-                            // Lifeforce has a cast duration, it should be cast at all saboteurs one by one
-                            presence->CastSpell((*itr), SPELL_LIFEFORCE, false);
-                }
-            }
+            me->UpdateEntry(NPC_HAIPHOON_AIR);
         }
-
-        void Register() override
+        else if (spellInfo->Id == SPELL_DEVOUR_WATER && me->GetCharmerOrOwnerPlayerOrPlayerItself())
         {
-            OnEffectHit += SpellEffectFn(spell_q12620_the_lifewarden_wrath_SpellScript::HandleSendEvent, EFFECT_0, SPELL_EFFECT_SEND_EVENT);
+            me->UpdateEntry(NPC_HAIPHOON_WATER);
         }
-    };
-
-    SpellScript* GetSpellScript() const override
-    {
-        return new spell_q12620_the_lifewarden_wrath_SpellScript();
     }
 };
 
 /*######
-## Quest Kick, What Kick? (12589)
+## Quest 12589: Kick, What Kick?
 ######*/
 
 enum KickWhatKick
@@ -457,195 +272,157 @@ enum KickWhatKick
     SAY_DROSTAN_REPLY_MISS    = 0,
 };
 
-class spell_q12589_shoot_rjr : public SpellScriptLoader
+// 51330 - Shoot RJR
+class spell_sholazar_shoot_rjr : public SpellScript
 {
-public:
-    spell_q12589_shoot_rjr() : SpellScriptLoader("spell_q12589_shoot_rjr") { }
-
-    class spell_q12589_shoot_rjr_SpellScript : public SpellScript
+    SpellCastResult CheckCast()
     {
-        PrepareSpellScript(spell_q12589_shoot_rjr_SpellScript);
+        if (Unit* target = GetExplTargetUnit())
+            if (target->GetEntry() == NPC_LUCKY_WILHELM)
+                return SPELL_CAST_OK;
 
-        SpellCastResult CheckCast()
+        SetCustomCastResultMessage(SPELL_CUSTOM_ERROR_MUST_TARGET_WILHELM);
+        return SPELL_FAILED_CUSTOM_ERROR;
+    }
+
+    void HandleDummy(SpellEffIndex /*effIndex*/)
+    {
+        uint32 roll = urand(1, 100);
+
+        uint8 ev;
+        if (roll <= 50)
+            ev = EVENT_MISS;
+        else if (roll <= 83)
+            ev = EVENT_HIT;
+        else
+            ev = EVENT_MISS_BIRD;
+
+        Unit* shooter = GetCaster();
+        Creature* wilhelm = GetHitUnit()->ToCreature();
+        Creature* apple = shooter->FindNearestCreature(NPC_APPLE, 30);
+        Creature* drostan = shooter->FindNearestCreature(NPC_DROSTAN, 30);
+
+        if (!wilhelm || !apple || !drostan)
+            return;
+
+        switch (ev)
         {
-            if (Unit* target = GetExplTargetUnit())
-                if (target->GetEntry() == NPC_LUCKY_WILHELM)
-                    return SPELL_CAST_OK;
-
-            SetCustomCastResultMessage(SPELL_CUSTOM_ERROR_MUST_TARGET_WILHELM);
-            return SPELL_FAILED_CUSTOM_ERROR;
-        }
-
-        void HandleDummy(SpellEffIndex /*effIndex*/)
-        {
-            uint32 roll = urand(1, 100);
-
-            uint8 ev;
-            if (roll <= 50)
-                ev = EVENT_MISS;
-            else if (roll <= 83)
-                ev = EVENT_HIT;
-            else
-                ev = EVENT_MISS_BIRD;
-
-            Unit* shooter = GetCaster();
-            Creature* wilhelm = GetHitUnit()->ToCreature();
-            Creature* apple = shooter->FindNearestCreature(NPC_APPLE, 30);
-            Creature* drostan = shooter->FindNearestCreature(NPC_DROSTAN, 30);
-
-            if (!wilhelm || !apple || !drostan)
-                return;
-
-            switch (ev)
+            case EVENT_MISS_BIRD:
             {
-                case EVENT_MISS_BIRD:
-                {
-                    Creature* crunchy = shooter->FindNearestCreature(NPC_CRUNCHY, 30);
-                    Creature* bird = shooter->FindNearestCreature(NPC_THICKBIRD, 30);
+                Creature* crunchy = shooter->FindNearestCreature(NPC_CRUNCHY, 30);
+                Creature* bird = shooter->FindNearestCreature(NPC_THICKBIRD, 30);
 
-                    if (bird && crunchy)
-                    {
-                        shooter->CastSpell(bird, SPELL_MISS_BIRD_APPLE);
-                        bird->CastSpell(bird, SPELL_BIRD_FALL);
-                        wilhelm->AI()->Talk(SAY_WILHELM_MISS);
-                        drostan->AI()->Talk(SAY_DROSTAN_REPLY_MISS);
-
-                        bird->KillSelf();
-                        crunchy->GetMotionMaster()->MovePoint(0, bird->GetPositionX(), bird->GetPositionY(),
-                            bird->GetMap()->GetWaterOrGroundLevel(bird->GetPhaseShift(), bird->GetPositionX(), bird->GetPositionY(), bird->GetPositionZ()));
-                        /// @todo Make crunchy perform emote eat when he reaches the bird
-                        break;
-                    }
-                    [[fallthrough]];
-                }
-                case EVENT_MISS:
+                if (bird && crunchy)
                 {
-                    shooter->CastSpell(wilhelm, SPELL_MISS_APPLE);
+                    shooter->CastSpell(bird, SPELL_MISS_BIRD_APPLE);
+                    bird->CastSpell(bird, SPELL_BIRD_FALL);
                     wilhelm->AI()->Talk(SAY_WILHELM_MISS);
                     drostan->AI()->Talk(SAY_DROSTAN_REPLY_MISS);
+
+                    bird->KillSelf();
+                    crunchy->GetMotionMaster()->MovePoint(0, bird->GetPositionX(), bird->GetPositionY(),
+                        bird->GetMap()->GetWaterOrGroundLevel(bird->GetPhaseShift(), bird->GetPositionX(), bird->GetPositionY(), bird->GetPositionZ()));
+                    /// @todo Make crunchy perform emote eat when he reaches the bird
                     break;
                 }
-                case EVENT_HIT:
-                {
-                    shooter->CastSpell(apple, SPELL_HIT_APPLE);
-                    apple->CastSpell(apple, SPELL_APPLE_FALL);
-                    wilhelm->AI()->Talk(SAY_WILHELM_HIT);
-                    if (Player* player = shooter->ToPlayer())
-                        player->KilledMonsterCredit(NPC_APPLE);
-                    break;
-                }
+                [[fallthrough]];
+            }
+            case EVENT_MISS:
+            {
+                shooter->CastSpell(wilhelm, SPELL_MISS_APPLE);
+                wilhelm->AI()->Talk(SAY_WILHELM_MISS);
+                drostan->AI()->Talk(SAY_DROSTAN_REPLY_MISS);
+                break;
+            }
+            case EVENT_HIT:
+            {
+                shooter->CastSpell(apple, SPELL_HIT_APPLE);
+                apple->CastSpell(apple, SPELL_APPLE_FALL);
+                wilhelm->AI()->Talk(SAY_WILHELM_HIT);
+                if (Player* player = shooter->ToPlayer())
+                    player->KilledMonsterCredit(NPC_APPLE);
+                break;
             }
         }
+    }
 
-        void Register() override
-        {
-            OnCheckCast += SpellCheckCastFn(spell_q12589_shoot_rjr_SpellScript::CheckCast);
-            OnEffectHitTarget += SpellEffectFn(spell_q12589_shoot_rjr_SpellScript::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
-        }
-    };
-
-    SpellScript* GetSpellScript() const override
+    void Register() override
     {
-        return new spell_q12589_shoot_rjr_SpellScript();
+        OnCheckCast += SpellCheckCastFn(spell_sholazar_shoot_rjr::CheckCast);
+        OnEffectHitTarget += SpellEffectFn(spell_sholazar_shoot_rjr::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
     }
 };
 
 /*######
-## Quest: Song of Wind and Water ID: 12726
+## Quest 12620: The Lifewarden's Wrath
 ######*/
-/*This quest precisly needs core script since battle vehicles are not well integrated with SAI,
-may be easily converted to SAI when they get.*/
-enum SongOfWindAndWater
+
+enum TheLifewardensWrath
 {
-    // Spells
-    SPELL_DEVOUR_WIND     = 52862,
-    SPELL_DEVOUR_WATER    = 52864,
-    // NPCs
-    NPC_HAIPHOON_WATER    = 28999,
-    NPC_HAIPHOON_AIR      = 28985
+    NPC_FREYAS_PRESENCE          = 28563,
+
+    WHISPER_ACTIVATE             = 0,
+
+    SPELL_FREYA_DUMMY_TRIGGER    = 51335,
+    SPELL_LASHER_EMERGE          = 48195,
+    SPELL_WILD_GROWTH            = 52948
 };
 
-class npc_haiphoon : public CreatureScript
+// 51957 - Call of the Lifewarden
+class spell_sholazar_call_of_the_lifewarden : public SpellScript
 {
-public:
-    npc_haiphoon() : CreatureScript("npc_haiphoon") { }
-
-    struct npc_haiphoonAI : public VehicleAI
+    void HandleSendEvent(SpellEffIndex effIndex)
     {
-        npc_haiphoonAI(Creature* creature) : VehicleAI(creature) { }
+        PreventHitDefaultEffect(effIndex);
 
-        void SpellHitTarget(WorldObject* target, SpellInfo const* spellInfo) override
+        if (Creature* presence = GetCaster()->FindNearestCreature(NPC_FREYAS_PRESENCE, 50.0f))
         {
-            if (target == me)
-                return;
-
-            if (spellInfo->Id == SPELL_DEVOUR_WIND && me->GetCharmerOrOwnerPlayerOrPlayerItself())
-            {
-                me->UpdateEntry(NPC_HAIPHOON_AIR);
-            }
-            else if (spellInfo->Id == SPELL_DEVOUR_WATER && me->GetCharmerOrOwnerPlayerOrPlayerItself())
-            {
-                me->UpdateEntry(NPC_HAIPHOON_WATER);
-            }
+            presence->AI()->Talk(WHISPER_ACTIVATE, GetCaster());
+            presence->AI()->SetData(1, 1);
         }
-    };
+    }
 
-    CreatureAI* GetAI(Creature* creature) const override
+    void Register() override
     {
-        return new npc_haiphoonAI(creature);
+        OnEffectHit += SpellEffectFn(spell_sholazar_call_of_the_lifewarden::HandleSendEvent, EFFECT_0, SPELL_EFFECT_SEND_EVENT);
+    }
+};
+
+// 51318 - Freya Dummy
+class spell_sholazar_freya_dummy : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(
+        {
+            SPELL_FREYA_DUMMY_TRIGGER,
+            SPELL_LASHER_EMERGE,
+            SPELL_WILD_GROWTH
+        });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        Unit* target = GetHitUnit();
+
+        target->CastSpell(target, SPELL_FREYA_DUMMY_TRIGGER, true);
+        target->CastSpell(target, SPELL_LASHER_EMERGE, false);
+        target->CastSpell(target, SPELL_WILD_GROWTH, false);
+        // This probably is scripted by the Emerge spell from above
+        target->SetEmoteState(EMOTE_ONESHOT_NONE);
+        target->SetUninteractible(false);
+        target->SetImmuneToNPC(false);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_sholazar_freya_dummy::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
     }
 };
 
 /*######
-## Quest Dreadsaber Mastery: Stalking the Prey (12550)
+## Quest 12611: Returned Sevenfold
 ######*/
-
-enum ShangoTracks
-{
-    SPELL_CORRECT_TRACKS   = 52160,
-    SPELL_INCORRECT_TRACKS = 52163,
-    SAY_CORRECT_TRACKS     = 28634,
-    SAY_INCORRECT_TRACKS   = 28635
-};
-
-class spell_shango_tracks : public SpellScriptLoader
-{
-public:
-   spell_shango_tracks() : SpellScriptLoader("spell_shango_tracks") { }
-
-    class spell_shango_tracks_SpellScript : public SpellScript
-    {
-        PrepareSpellScript(spell_shango_tracks_SpellScript);
-
-        void HandleScript(SpellEffIndex /*effIndex*/)
-        {
-            if (Unit* target = GetHitUnit())
-            {
-                switch (GetSpellInfo()->Id)
-                {
-                    case SPELL_CORRECT_TRACKS:
-                        target->Say(SAY_CORRECT_TRACKS, target);
-                        break;
-                    case SPELL_INCORRECT_TRACKS:
-                        target->Say(SAY_INCORRECT_TRACKS, target);
-                        break;
-                    default:
-                        break;
-                }
-            }
-        }
-
-        void Register() override
-        {
-            OnEffectHitTarget += SpellEffectFn(spell_shango_tracks_SpellScript::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
-        }
-    };
-
-    SpellScript* GetSpellScript() const override
-    {
-        return new spell_shango_tracks_SpellScript();
-    }
-};
 
 enum ReturnedSevenfold
 {
@@ -654,21 +431,20 @@ enum ReturnedSevenfold
     SPELL_DEATHBOLT             = 51855
 };
 
-class spell_q12611_deathbolt : public SpellScript
+// 51854 - Deathbolt
+class spell_sholazar_deathbolt : public SpellScript
 {
-    PrepareSpellScript(spell_q12611_deathbolt);
-
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
         return ValidateSpellInfo(
-            {
-                SPELL_FREYAS_WARD,
-                SPELL_SEVENFOLD_RETRIBUTION,
-                SPELL_DEATHBOLT
-            });
+        {
+            SPELL_FREYAS_WARD,
+            SPELL_SEVENFOLD_RETRIBUTION,
+            SPELL_DEATHBOLT
+        });
     }
 
-    void HandleScriptEffect(SpellEffIndex /* effIndex */)
+    void HandleScript(SpellEffIndex /* effIndex */)
     {
         Unit* caster = GetCaster();
         Unit* target = GetHitUnit();
@@ -681,17 +457,302 @@ class spell_q12611_deathbolt : public SpellScript
 
     void Register() override
     {
-        OnEffectHitTarget += SpellEffectFn(spell_q12611_deathbolt::HandleScriptEffect, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+        OnEffectHitTarget += SpellEffectFn(spell_sholazar_deathbolt::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+/*######
+## Quest 12683: Burning to Help
+######*/
+
+enum BurningToHelp
+{
+    SPELL_HYDRA_SPUTUM     = 52307
+};
+
+// 52308 - Take Sputum Sample
+class spell_sholazar_take_sputum_sample : public SpellScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellEffect({ { spellInfo->Id, EFFECT_1 } }) && ValidateSpellInfo(
+        {
+            uint32(spellInfo->GetEffect(EFFECT_0).CalcValueAsInt()),
+            uint32(spellInfo->GetEffect(EFFECT_1).CalcValueAsInt())
+        });
+    }
+
+    SpellCastResult CheckCast()
+    {
+        if (!GetCaster()->HasAura(uint32(GetEffectInfo(EFFECT_1).CalcValueAsInt())))
+            return SPELL_FAILED_CASTER_AURASTATE;
+
+        return SPELL_CAST_OK;
+    }
+
+    void HandleDummy(SpellEffIndex /*effIndex*/)
+    {
+        GetCaster()->CastSpell(GetCaster(), uint32(GetEffectValueAsInt()));
+    }
+
+    void Register() override
+    {
+        OnCheckCast += SpellCheckCastFn(spell_sholazar_take_sputum_sample::CheckCast);
+        OnEffectHit += SpellEffectFn(spell_sholazar_take_sputum_sample::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+// 52306 - Sputum Collected
+class spell_sholazar_sputum_collected : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_HYDRA_SPUTUM });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        GetCaster()->RemoveAurasDueToSpell(SPELL_HYDRA_SPUTUM);
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_sholazar_sputum_collected::HandleScript, EFFECT_1, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+/*######
+## Quest 12735: A Cleansing Song
+######*/
+
+enum ACleansingSong
+{
+    SPELL_SUMMON_SPIRIT_ATHA        = 52954,
+    SPELL_SUMMON_SPIRIT_HAKHALAN    = 52958,
+    SPELL_SUMMON_SPIRIT_KOOSU       = 52959,
+
+    AREA_BITTERTIDE_LAKE            = 4385,
+    AREA_RIVERS_HEART               = 4290,
+    AREA_WINTERGRASP_RIVER          = 4388
+};
+
+// 52941 - Song of Cleansing
+class spell_sholazar_song_of_cleansing : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(
+        {
+            SPELL_SUMMON_SPIRIT_ATHA,
+            SPELL_SUMMON_SPIRIT_HAKHALAN,
+            SPELL_SUMMON_SPIRIT_KOOSU
+        });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        Unit* caster = GetCaster();
+        switch (caster->GetAreaId())
+        {
+            case AREA_BITTERTIDE_LAKE:
+                caster->CastSpell(caster, SPELL_SUMMON_SPIRIT_ATHA);
+                break;
+            case AREA_RIVERS_HEART:
+                caster->CastSpell(caster, SPELL_SUMMON_SPIRIT_HAKHALAN);
+                break;
+            case AREA_WINTERGRASP_RIVER:
+                caster->CastSpell(caster, SPELL_SUMMON_SPIRIT_KOOSU);
+                break;
+            default:
+                break;
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_sholazar_song_of_cleansing::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+/*######
+## Quest 12741: Strength of the Tempest
+######*/
+
+enum StrengthOfTheTempest
+{
+    SPELL_CREATE_POWER_OF_THE_TEMPEST   = 53067
+};
+
+// 53062 - Lightning Strike
+class spell_sholazar_lightning_strike : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_CREATE_POWER_OF_THE_TEMPEST });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        GetHitUnit()->CastSpell(GetHitUnit(), SPELL_CREATE_POWER_OF_THE_TEMPEST);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_sholazar_lightning_strike::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+/*######
+## Quest 12521: Where in the World is Hemet Nesingwary?
+######*/
+
+// 51071 - Flight to Sholazar (Missile Warning)
+class spell_sholazar_flight_to_sholazar : public SpellScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return sBroadcastTextStore.LookupEntry(uint32(spellInfo->GetEffect(EFFECT_0).CalcValueAsInt()));
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        // 51076 (triggers 51071) is Area Aura - Party and applies on player too (no aura in sniffs on player)
+        // That makes both player and creature say
+        if (Creature* caster = GetCaster()->ToCreature())
+            caster->Unit::Say(uint32(GetEffectValueAsInt()), caster);
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_sholazar_flight_to_sholazar::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+/*######
+## Quest 12634: Some Make Lemonade, Some Make Liquor
+######*/
+
+enum SomeMakeLemonadeSomeMakeLiquor
+{
+    SPELL_BANANAS_FALL_TO_GROUND    = 51836,
+    SPELL_ORANGE_FALLS_TO_GROUND    = 51837,
+    SPELL_PAPAYA_FALLS_TO_GROUND    = 51839,
+    SPELL_TRIGGER_SPAWN_DWARF       = 52078
+};
+
+// This should be scripted in DB but our action lists aren't good enough to properly support chance
+// 51840 - Despawn Fruit Tosser
+class spell_sholazar_despawn_fruit_tosser : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellEntry*/) override
+    {
+        return ValidateSpellInfo(
+        {
+            SPELL_BANANAS_FALL_TO_GROUND,
+            SPELL_ORANGE_FALLS_TO_GROUND,
+            SPELL_PAPAYA_FALLS_TO_GROUND,
+            SPELL_TRIGGER_SPAWN_DWARF
+        });
+    }
+
+    void HandleDummy(SpellEffIndex /*effIndex*/)
+    {
+        uint32 spellId = SPELL_BANANAS_FALL_TO_GROUND;
+        switch (urand(0, 3))
+        {
+            case 1: spellId = SPELL_ORANGE_FALLS_TO_GROUND; break;
+            case 2: spellId = SPELL_PAPAYA_FALLS_TO_GROUND; break;
+        }
+        // sometimes, if you're lucky, you get a dwarf
+        if (roll_chance(5))
+            spellId = SPELL_TRIGGER_SPAWN_DWARF;
+
+        GetHitUnit()->CastSpell(GetCaster(), spellId);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_sholazar_despawn_fruit_tosser::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
+    }
+};
+
+/*######
+## Quest 12805: Salvaging Life's Strength
+######*/
+
+enum SalvagingLifesStength
+{
+    NPC_SHARD_KILL_CREDIT       = 29303
+};
+
+// 54190 - Lifeblood Dummy
+class spell_sholazar_lifeblood_dummy : public SpellScript
+{
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellInfo({ uint32(spellInfo->GetEffect(EFFECT_0).CalcValue()) }) &&
+            sObjectMgr->GetCreatureTemplate(NPC_SHARD_KILL_CREDIT);
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        if (GetHitUnit()->HasAura(uint32(GetEffectValue())))
+        {
+            if (Player* caster = GetCaster()->ToPlayer())
+                caster->KilledMonsterCredit(NPC_SHARD_KILL_CREDIT);
+
+            GetHitUnit()->RemoveAurasDueToSpell(uint32(GetEffectValueAsInt()));
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_sholazar_lifeblood_dummy::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+/*######
+## Quest 12607: A Mammoth Undertaking
+######*/
+
+enum AMammothUndertaking
+{
+    SPELL_RIDE_SHATTERTUSK_MAMMOTH     = 51658
+};
+
+// 51656 - Mount Mammoth Cue
+class spell_sholazar_mount_mammoth_cue : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_RIDE_SHATTERTUSK_MAMMOTH });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        GetHitUnit()->CastSpell(GetCaster(), SPELL_RIDE_SHATTERTUSK_MAMMOTH, true);
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_sholazar_mount_mammoth_cue::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
     }
 };
 
 void AddSC_sholazar_basin()
 {
-    new npc_engineer_helice();
-    new npc_jungle_punch_target();
-    new spell_q12620_the_lifewarden_wrath();
-    new spell_q12589_shoot_rjr();
-    new npc_haiphoon();
-    new spell_shango_tracks();
-    RegisterSpellScript(spell_q12611_deathbolt);
+    RegisterCreatureAI(npc_jungle_punch_target);
+    RegisterCreatureAI(npc_haiphoon);
+    RegisterSpellScript(spell_sholazar_shoot_rjr);
+    RegisterSpellScript(spell_sholazar_call_of_the_lifewarden);
+    RegisterSpellScript(spell_sholazar_freya_dummy);
+    RegisterSpellScript(spell_sholazar_deathbolt);
+    RegisterSpellScript(spell_sholazar_take_sputum_sample);
+    RegisterSpellScript(spell_sholazar_sputum_collected);
+    RegisterSpellScript(spell_sholazar_song_of_cleansing);
+    RegisterSpellScript(spell_sholazar_lightning_strike);
+    RegisterSpellScript(spell_sholazar_flight_to_sholazar);
+    RegisterSpellScript(spell_sholazar_despawn_fruit_tosser);
+    RegisterSpellScript(spell_sholazar_lifeblood_dummy);
+    RegisterSpellScript(spell_sholazar_mount_mammoth_cue);
 }

@@ -54,12 +54,11 @@ enum BTDataTypes
     DATA_ESSENCE_OF_DESIRE          = 21,
     DATA_ESSENCE_OF_ANGER           = 22,
     DATA_ILLIDAN_MUSIC_CONTROLLER   = 23,
-    DATA_TERON_GOREFIEND_INTRO      = 24,
-    DATA_AKAMA_ILLIDAN_INTRO        = 25,
-    DATA_RELIQUARY_COMBAT_TRIGGER   = 26
+    DATA_AKAMA_ILLIDAN_INTRO        = 24,
+    DATA_RELIQUARY_COMBAT_TRIGGER   = 25
 };
 
-enum TriggerEmotes
+enum BTTexts
 {
     EMOTE_HIGH_WARLORD_NAJENTUS_DIED = 0,
     EMOTE_DEN_OF_MORTAL_DOOR_OPEN    = 1
@@ -133,7 +132,7 @@ enum BTGameObjectIds
     GO_ILLIDAN_MUSIC_CONTROLLER     = 185966
 };
 
-enum BlackTempleMisc
+enum BTMisc
 {
     AKAMA_INTRO                     = 1,
     AKAMA_FIGHT                     = 2,

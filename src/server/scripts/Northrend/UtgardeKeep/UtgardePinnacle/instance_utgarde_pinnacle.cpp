@@ -26,14 +26,13 @@ BossBoundaryData const boundaries =
     { DATA_KING_YMIRON, new RectangleBoundary(340.0f, 443.0f, -412.0f, -275.0f) }
 };
 
-DoorData const doorData[] =
+static constexpr DoorData doorData[] =
 {
-    { GO_SKADI_THE_RUTHLESS_DOOR,   DATA_SKADI_THE_RUTHLESS,    DOOR_TYPE_PASSAGE },
-    { GO_KING_YMIRON_DOOR,          DATA_KING_YMIRON,           DOOR_TYPE_PASSAGE },
-    { 0,                            0,                          DOOR_TYPE_ROOM    } // END
+    { GO_SKADI_THE_RUTHLESS_DOOR,   DATA_SKADI_THE_RUTHLESS,    EncounterDoorBehavior::OpenWhenDone },
+    { GO_KING_YMIRON_DOOR,          DATA_KING_YMIRON,           EncounterDoorBehavior::OpenWhenDone },
 };
 
-ObjectData const creatureData[] =
+static constexpr ObjectData creatureData[] =
 {
     { NPC_SVALA_SORROWGRAVE,        DATA_SVALA_SORROWGRAVE      },
     { NPC_GORTOK_PALEHOOF,          DATA_GORTOK_PALEHOOF        },
@@ -46,14 +45,20 @@ ObjectData const creatureData[] =
     { NPC_PALEHOOF_ORB,             DATA_GORTOK_ORB             },
     { NPC_SVALA,                    DATA_SVALA                  },
     { NPC_GRAUF,                    DATA_GRAUF                  },
-    { 0,                            0                           } // END
 };
 
-ObjectData const gameObjectData[] =
+static constexpr ObjectData gameObjectData[] =
 {
     { GO_UTGARDE_MIRROR,            DATA_UTGARDE_MIRROR         },
     { GO_GORTOK_PALEHOOF_SPHERE,    DATA_GORTOK_PALEHOOF_SPHERE },
-    { 0,                            0                           } //END
+};
+
+static constexpr DungeonEncounterData encounters[] =
+{
+    { DATA_SVALA_SORROWGRAVE, {{ 2030 }} },
+    { DATA_GORTOK_PALEHOOF, {{ 2027 }} },
+    { DATA_SKADI_THE_RUTHLESS, {{ 2029 }} },
+    { DATA_KING_YMIRON, {{ 2028 }} }
 };
 
 class instance_utgarde_pinnacle : public InstanceMapScript
@@ -70,8 +75,8 @@ class instance_utgarde_pinnacle : public InstanceMapScript
                 LoadBossBoundaries(boundaries);
                 LoadDoorData(doorData);
                 LoadObjectData(creatureData, gameObjectData);
+                LoadDungeonEncounterData(encounters);
             }
-
 
             void OnGameObjectCreate(GameObject* go) override
             {
@@ -79,7 +84,7 @@ class instance_utgarde_pinnacle : public InstanceMapScript
 
                 if (go->GetEntry() == GO_GORTOK_PALEHOOF_SPHERE)
                     if (GetBossState(DATA_GORTOK_PALEHOOF) == DONE)
-                        go->AddFlag(GO_FLAG_NOT_SELECTABLE);
+                        go->SetFlag(GO_FLAG_NOT_SELECTABLE);
             }
 
             void SetGuidData(uint32 type, ObjectGuid data) override

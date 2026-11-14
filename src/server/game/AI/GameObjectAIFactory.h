@@ -18,7 +18,7 @@
 #ifndef TRINITY_GAMEOBJECTAIFACTORY_H
 #define TRINITY_GAMEOBJECTAIFACTORY_H
 
-#include "ObjectRegistry.h"
+#include "ObjectMgr.h"
 #include "SelectableAI.h"
 
 class GameObject;

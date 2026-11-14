@@ -20,14 +20,26 @@
 #include "InstanceScript.h"
 #include "ScriptMgr.h"
 
-DoorData const doorData[] =
+static constexpr DoorData doorData[] =
 {
-    { GO_VENOXIS_COIL,                  DATA_VENOXIS,   DOOR_TYPE_ROOM },
-    { GO_ARENA_DOOR_1,                  DATA_MANDOKIR,  DOOR_TYPE_ROOM },
-    { GO_FORCEFIELD,                    DATA_KILNARA,   DOOR_TYPE_ROOM },
-    { GO_ZANZIL_DOOR,                   DATA_ZANZIL,    DOOR_TYPE_ROOM },
-    //{ GO_THE_CACHE_OF_MADNESS_DOOR,     DATA_xxxxxxx,   DOOR_TYPE_ROOM },
-    { 0,                                0,              DOOR_TYPE_ROOM }
+    { GO_VENOXIS_COIL,                  DATA_VENOXIS,   EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_ARENA_DOOR_1,                  DATA_MANDOKIR,  EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_FORCEFIELD,                    DATA_KILNARA,   EncounterDoorBehavior::OpenWhenNotInProgress },
+    { GO_ZANZIL_DOOR,                   DATA_ZANZIL,    EncounterDoorBehavior::OpenWhenNotInProgress },
+    //{ GO_THE_CACHE_OF_MADNESS_DOOR,     DATA_xxxxxxx,   EncounterStateForOpenDoor::NotInProgress },
+};
+
+static constexpr DungeonEncounterData encounters[] =
+{
+    { DATA_VENOXIS, {{ 1178 }} },
+    { DATA_MANDOKIR, {{ 1179 }} },
+    { DATA_KILNARA, {{ 1180 }} },
+    { DATA_ZANZIL, {{ 1181 }} },
+    { DATA_JINDO, {{ 1182 }} },
+    { DATA_HAZZARAH, {{ 1188 }} },
+    { DATA_RENATAKI, {{ 1188 }} },
+    { DATA_WUSHOOLAY, {{ 1188 }} },
+    { DATA_GRILEK, {{ 1188 }} }
 };
 
 class instance_zulgurub : public InstanceMapScript
@@ -42,6 +54,7 @@ class instance_zulgurub : public InstanceMapScript
                 SetHeaders(DataHeader);
                 SetBossNumber(EncounterCount);
                 LoadDoorData(doorData);
+                LoadDungeonEncounterData(encounters);
             }
 
             void OnCreatureCreate(Creature* creature) override

@@ -33,7 +33,9 @@ EndContentData */
 #include "GameObject.h"
 #include "GameObjectAI.h"
 #include "Group.h"
+#include "ScenarioMgr.h"
 #include "InstanceScript.h"
+#include "Map.h"
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
@@ -58,17 +60,17 @@ class go_gauntlet_gate : public GameObjectScript
 
             InstanceScript* instance;
 
-            bool GossipHello(Player* player) override
+            bool OnGossipHello(Player* player) override
             {
                 if (instance->GetData(TYPE_BARON_RUN) != NOT_STARTED)
                     return false;
 
                 if (Group* group = player->GetGroup())
                 {
-                    for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
+                    for (GroupReference const& itr : group->GetMembers())
                     {
-                        Player* pGroupie = itr->GetSource();
-                        if (!pGroupie || !pGroupie->IsInMap(player))
+                        Player* pGroupie = itr.GetSource();
+                        if (!pGroupie->IsInMap(player))
                             continue;
 
                         if (pGroupie->GetQuestStatus(QUEST_DEAD_MAN_PLEA) == QUEST_STATUS_INCOMPLETE &&
@@ -290,8 +292,6 @@ public:
                 TouchTimer = 7000;
             }
             else TouchTimer -= diff;
-
-            DoMeleeAttackIfReady();
         }
 
         void ReceiveEmote(Player* player, uint32 emote) override
@@ -322,10 +322,9 @@ public:
 
 };
 
+// 31912 - Ysida Saved Credit Trigger
 class spell_ysida_saved_credit : public SpellScript
 {
-    PrepareSpellScript(spell_ysida_saved_credit);
-
     bool Validate(SpellInfo const* /*spell*/) override
     {
         return ValidateSpellInfo({ SPELL_YSIDA_SAVED });
@@ -361,10 +360,9 @@ enum HauntingPhantoms
     SPELL_SUMMON_WRATH_PHANTOM    = 16335
 };
 
+// 16336 - Haunting Phantoms
 class spell_stratholme_haunting_phantoms : public AuraScript
 {
-    PrepareAuraScript(spell_stratholme_haunting_phantoms);
-
     void CalcPeriodic(AuraEffect const* /*aurEff*/, bool& isPeriodic, int32& amplitude)
     {
         isPeriodic = true;
@@ -373,7 +371,7 @@ class spell_stratholme_haunting_phantoms : public AuraScript
 
     void HandleDummyTick(AuraEffect const* /*aurEff*/)
     {
-        if (roll_chance_i(50))
+        if (roll_chance(50))
             GetTarget()->CastSpell(nullptr, SPELL_SUMMON_SPITEFUL_PHANTOM, true);
         else
             GetTarget()->CastSpell(nullptr, SPELL_SUMMON_WRATH_PHANTOM, true);
@@ -392,11 +390,31 @@ class spell_stratholme_haunting_phantoms : public AuraScript
     }
 };
 
+static constexpr uint32 StratholmeLfgDungeonServiceEntrance = 274;
+static constexpr uint32 StratholmeScenarioServiceEntrance = 637;
+
+// 10107 - Areatrigger
+class at_stratholme_service_entrance : public OnlyOnceAreaTriggerScript
+{
+public:
+    at_stratholme_service_entrance() : OnlyOnceAreaTriggerScript("at_stratholme_service_entrance") { }
+
+    bool TryHandleOnce(Player* player, AreaTriggerEntry const* /*areaTrigger*/) override
+    {
+        if (InstanceMap* map = player->GetMap()->ToInstanceMap())
+            if (map->GetLfgDungeonsId() == StratholmeLfgDungeonServiceEntrance)
+                map->SetInstanceScenario(sScenarioMgr->CreateInstanceScenario(map, StratholmeScenarioServiceEntrance));
+
+        return true;
+    }
+};
+
 void AddSC_stratholme()
 {
     new go_gauntlet_gate();
     new npc_restless_soul();
     new npc_spectral_ghostly_citizen();
     RegisterSpellScript(spell_ysida_saved_credit);
-    RegisterAuraScript(spell_stratholme_haunting_phantoms);
+    RegisterSpellScript(spell_stratholme_haunting_phantoms);
+    new at_stratholme_service_entrance();
 }

@@ -23,7 +23,7 @@
 #define ACScriptName "instance_auchenai_crypts"
 #define DataHeader   "AC"
 
-uint32 const EncounterCount = 2;
+uint32 constexpr EncounterCount     = 2;
 
 enum ACDataTypes
 {
@@ -37,5 +37,7 @@ inline AI* GetAuchenaiCryptsAI(T* obj)
 {
     return GetInstanceAI<AI>(obj, ACScriptName);
 }
+
+#define RegisterAuchenaiCryptsCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetAuchenaiCryptsAI)
 
 #endif // AUCHENAI_CRYPTS_H_

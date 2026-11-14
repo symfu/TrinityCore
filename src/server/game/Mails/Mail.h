@@ -20,6 +20,7 @@
 
 #include "Common.h"
 #include "DatabaseEnvFwd.h"
+#include "EnumFlag.h"
 #include "ObjectGuid.h"
 #include <map>
 
@@ -36,24 +37,40 @@ class Player;
 
 enum MailMessageType
 {
-    MAIL_NORMAL           = 0,
-    MAIL_AUCTION          = 2,
-    MAIL_CREATURE         = 3,                              // client send CMSG_CREATURE_QUERY on this mailmessagetype
-    MAIL_GAMEOBJECT       = 4,                              // client send CMSG_GAMEOBJECT_QUERY on this mailmessagetype
-    MAIL_CALENDAR         = 5,
-    MAIL_BLACKMARKET      = 6,
-    MAIL_COMMERCE_AUCTION = 7                               // wow token auction
+    MAIL_NORMAL                 = 0,
+    MAIL_AUCTION                = 2,
+    MAIL_CREATURE               = 3,                        // client send CMSG_CREATURE_QUERY on this mailmessagetype
+    MAIL_GAMEOBJECT             = 4,                        // client send CMSG_GAMEOBJECT_QUERY on this mailmessagetype
+    MAIL_CALENDAR               = 5,
+    MAIL_BLACKMARKET            = 6,
+    MAIL_COMMERCE_AUCTION       = 7,                        // wow token auction
+    MAIL_AUCTION_2              = 8,
+    MAIL_ARTISANS_CONSORTIUM    = 9                         // crafting orders
 };
 
-enum MailCheckMask
+enum MailCheckMask : uint32
 {
-    MAIL_CHECK_MASK_NONE        = 0x00,
-    MAIL_CHECK_MASK_READ        = 0x01,
-    MAIL_CHECK_MASK_RETURNED    = 0x02,                     /// This mail was returned. Do not allow returning mail back again.
-    MAIL_CHECK_MASK_COPIED      = 0x04,                     /// This mail was copied. Do not allow making a copy of items in mail.
-    MAIL_CHECK_MASK_COD_PAYMENT = 0x08,
-    MAIL_CHECK_MASK_HAS_BODY    = 0x10                      /// This mail has body text.
+    MAIL_CHECK_MASK_NONE                            = 0x00000,
+    MAIL_CHECK_MASK_READ                            = 0x00001,  ///< This mail was read.
+    MAIL_CHECK_MASK_RETURNED                        = 0x00002,  ///< This mail was returned. Do not allow returning mail back again.
+    MAIL_CHECK_MASK_COPIED                          = 0x00004,  ///< This mail was copied. Do not allow making a copy of items in mail.
+    MAIL_CHECK_MASK_COD_PAYMENT                     = 0x00008,  ///< This mail is payable on delivery
+    MAIL_CHECK_MASK_HAS_BODY                        = 0x00010,  ///< This mail has body text.
+    MAIL_CHECK_MASK_UNK_5                           = 0x00020,
+    MAIL_CHECK_MASK_AUCTION_WON                     = 0x00040,  ///< This mail is delivering won auction items.
+    MAIL_CHECK_MASK_UNK_7                           = 0x00080,
+    MAIL_CHECK_MASK_CALENDAR_INVITE                 = 0x00100,  ///< This mail is related to calendar invite.
+    MAIL_CHECK_MASK_NOT_RETURNABLE                  = 0x00200,  ///< This mail cannot be returned even if mail was not returned before.
+    MAIL_CHECK_MASK_AUCTION                         = 0x00400,  ///< This mail came from auction house.
+    MAIL_CHECK_MASK_NOT_DELETABLE_WITH_ATTACHMENTS  = 0x00800,  ///< This mail cannot be deleted without taking attachments first.
+    MAIL_CHECK_MASK_UNK_12                          = 0x01000,
+    MAIL_CHECK_MASK_UNK_13                          = 0x02000,
+    MAIL_CHECK_MASK_RESTORED_ITEM                   = 0x04000,  ///< This mail contains recovered items.
+    MAIL_CHECK_MASK_NOT_COPYABLE                    = 0x08000,  ///< This mail cannot be copied.
+    MAIL_CHECK_MASK_COMMERCE                        = 0x10000,  ///< WoW Token mail.
 };
+
+DEFINE_ENUM_FLAG(MailCheckMask);
 
 // gathered from Stationery.dbc
 enum MailStationery
@@ -72,15 +89,6 @@ enum MailState
     MAIL_STATE_UNCHANGED = 1,
     MAIL_STATE_CHANGED   = 2,
     MAIL_STATE_DELETED   = 3
-};
-
-enum MailShowFlags
-{
-    MAIL_SHOW_UNK0    = 0x0001,
-    MAIL_SHOW_DELETE  = 0x0002,                             // forced show delete button instead return button
-    MAIL_SHOW_AUCTION = 0x0004,                             // from old comment
-    MAIL_SHOW_UNK2    = 0x0008,                             // unknown, COD will be shown even without that flag
-    MAIL_SHOW_RETURN  = 0x0010
 };
 
 class TC_GAME_API MailSender
@@ -144,12 +152,12 @@ class TC_GAME_API MailDraft
         MailDraft& AddCOD(uint64 COD) { m_COD = COD; return *this; }
 
     public:                                                 // finishers
-        void SendReturnToSender(uint32 sender_acc, ObjectGuid::LowType sender_guid, ObjectGuid::LowType receiver_guid, CharacterDatabaseTransaction& trans);
-        void SendMailTo(CharacterDatabaseTransaction& trans, MailReceiver const& receiver, MailSender const& sender, MailCheckMask checked = MAIL_CHECK_MASK_NONE, uint32 deliver_delay = 0);
+        void SendReturnToSender(uint32 sender_acc, ObjectGuid::LowType sender_guid, ObjectGuid::LowType receiver_guid, CharacterDatabaseTransaction trans);
+        void SendMailTo(CharacterDatabaseTransaction trans, MailReceiver const& receiver, MailSender const& sender, MailCheckMask checked = MAIL_CHECK_MASK_NONE, uint32 deliver_delay = 0);
 
     private:
-        void deleteIncludedItems(CharacterDatabaseTransaction& trans, bool inDB = false);
-        void prepareItems(Player* receiver, CharacterDatabaseTransaction& trans);                // called from SendMailTo for generate mailTemplateBase items
+        void deleteIncludedItems(CharacterDatabaseTransaction trans, bool inDB = false);
+        void prepareItems(Player* receiver, CharacterDatabaseTransaction trans);                // called from SendMailTo for generate mailTemplateBase items
 
         uint16      m_mailTemplateId;
         bool        m_mailTemplateItemsNeed;
@@ -169,9 +177,9 @@ struct MailItemInfo
 };
 typedef std::vector<MailItemInfo> MailItemInfoVec;
 
-struct TC_GAME_API Mail
+struct Mail
 {
-    uint32 messageID;
+    uint64 messageID;
     uint8 messageType;
     uint8 stationery;
     uint16 mailTemplateId;

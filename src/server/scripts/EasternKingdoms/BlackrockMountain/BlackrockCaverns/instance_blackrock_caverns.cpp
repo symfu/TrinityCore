@@ -19,10 +19,18 @@
 #include "blackrock_caverns.h"
 #include "InstanceScript.h"
 
-ObjectData const creatureData[] =
+static constexpr ObjectData creatureData[] =
 {
     { NPC_RAZ_THE_CRAZED, DATA_RAZ_THE_CRAZED },
-    { 0,                  0                   }
+};
+
+static constexpr DungeonEncounterData encounters[] =
+{
+    { DATA_ROMOGG_BONECRUSHER, {{ 1040 }} },
+    { DATA_CORLA, {{ 1038 }} },
+    { DATA_KARSH_STEELBENDER, {{ 1039 }} },
+    { DATA_BEAUTY, {{ 1037 }} },
+    { DATA_ASCENDANT_LORD_OBSIDIUS, {{ 1036 }} }
 };
 
 class instance_blackrock_caverns : public InstanceMapScript
@@ -36,7 +44,8 @@ class instance_blackrock_caverns : public InstanceMapScript
             {
                 SetHeaders(DataHeader);
                 SetBossNumber(EncounterCount);
-                LoadObjectData(creatureData, nullptr);
+                LoadObjectData(creatureData, {});
+                LoadDungeonEncounterData(encounters);
             }
 
             bool SetBossState(uint32 type, EncounterState state) override

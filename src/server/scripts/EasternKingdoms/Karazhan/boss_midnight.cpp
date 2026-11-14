@@ -23,6 +23,7 @@ SDCategory: Karazhan
 EndScriptData */
 
 #include "ScriptMgr.h"
+#include "Containers.h"
 #include "karazhan.h"
 #include "MotionMaster.h"
 #include "ObjectAccessor.h"
@@ -101,13 +102,13 @@ public:
 
         void ScheduleTasks() override
         {
-            scheduler.Schedule(Seconds(15), Seconds(25), [this](TaskContext task)
+            scheduler.Schedule(Seconds(15), Seconds(25), [this](TaskContext& task)
             {
                 DoCastVictim(SPELL_SHADOWCLEAVE);
                 task.Repeat(Seconds(15), Seconds(25));
             });
 
-            scheduler.Schedule(Seconds(25), Seconds(45), [this](TaskContext task)
+            scheduler.Schedule(Seconds(25), Seconds(45), [this](TaskContext& task)
             {
                 if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
                     DoCast(target,SPELL_INTANGIBLE_PRESENCE);
@@ -115,14 +116,14 @@ public:
                 task.Repeat(Seconds(25), Seconds(45));
             });
 
-            scheduler.Schedule(Seconds(30), Seconds(60), [this](TaskContext task)
+            scheduler.Schedule(Seconds(30), Seconds(60), [this](TaskContext& task)
             {
                 Talk(SAY_RANDOM);
                 task.Repeat(Seconds(30), Seconds(60));
             });
         }
 
-        void DamageTaken(Unit* /*attacker*/, uint32 &damage) override
+        void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
         {
             // Attumen does not die until he mounts Midnight, let health fall to 1 and prevent further damage.
             if (damage >= me->GetHealth() && _phase != PHASE_MOUNTED)
@@ -169,7 +170,7 @@ public:
                 _phase = PHASE_MOUNTED;
                 DoCastSelf(SPELL_SPAWN_SMOKE);
 
-                scheduler.Schedule(Seconds(10), Seconds(25), [this](TaskContext task)
+                scheduler.Schedule(Seconds(10), Seconds(25), [this](TaskContext& task)
                 {
                     Unit* target = nullptr;
                     std::vector<Unit*> target_list;
@@ -190,7 +191,7 @@ public:
                     task.Repeat(Seconds(10), Seconds(25));
                 });
 
-                scheduler.Schedule(Seconds(25), Seconds(35), [this](TaskContext task)
+                scheduler.Schedule(Seconds(25), Seconds(35), [this](TaskContext& task)
                 {
                     DoCastVictim(SPELL_KNOCKDOWN);
                     task.Repeat(Seconds(25), Seconds(35));
@@ -218,8 +219,7 @@ public:
             if (!UpdateVictim() && _phase != PHASE_NONE)
                 return;
 
-            scheduler.Update(diff,
-                std::bind(&BossAI::DoMeleeAttackIfReady, this));
+            scheduler.Update(diff);
         }
 
         void SpellHit(WorldObject* /*caster*/, SpellInfo const* spellInfo) override
@@ -246,7 +246,7 @@ public:
                     me->GetMotionMaster()->MoveFollow(midnight, 2.0f, 0.0f);
                     Talk(SAY_MOUNT);
 
-                    scheduler.Schedule(Seconds(1), [this](TaskContext task)
+                    scheduler.Schedule(Seconds(1), [this](TaskContext& task)
                     {
                         if (Creature* midnight = ObjectAccessor::GetCreature(*me, _midnightGUID))
                         {
@@ -305,7 +305,7 @@ public:
             me->SetReactState(REACT_DEFENSIVE);
         }
 
-        void DamageTaken(Unit* /*attacker*/, uint32 &damage) override
+        void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
         {
             // Midnight never dies, let health fall to 1 and prevent further damage.
             if (damage >= me->GetHealth())
@@ -341,7 +341,7 @@ public:
         {
             BossAI::JustEngagedWith(who);
 
-            scheduler.Schedule(Seconds(15), Seconds(25), [this](TaskContext task)
+            scheduler.Schedule(Seconds(15), Seconds(25), [this](TaskContext& task)
             {
                 DoCastVictim(SPELL_KNOCKDOWN);
                 task.Repeat(Seconds(15), Seconds(25));
@@ -367,8 +367,7 @@ public:
             if (!UpdateVictim() || _phase == PHASE_MOUNTED)
                 return;
 
-            scheduler.Update(diff,
-                std::bind(&BossAI::DoMeleeAttackIfReady, this));
+            scheduler.Update(diff);
         }
 
         private:

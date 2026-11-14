@@ -18,108 +18,218 @@
 #ifndef TRINITY_CHATCOMMANDTAGS_H
 #define TRINITY_CHATCOMMANDTAGS_H
 
-#include "advstd.h"
 #include "ChatCommandHelpers.h"
 #include "Hyperlinks.h"
+#include "ObjectGuid.h"
 #include "Optional.h"
-#include <cmath>
-#include <cstring>
-#include <iostream>
+#include "Util.h"
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
 
-namespace Trinity::ChatCommands
+class ChatHandler;
+class Player;
+class WorldSession;
+
+namespace Trinity::Impl::ChatCommands
 {
-    /************************** CONTAINER TAGS **********************************************\
-    |* Simple holder classes to differentiate between extraction methods                    *|
-    |* Should inherit from ContainerTag for template identification                         *|
-    |* Must implement the following:                                                        *|
-    |* - TryConsume: char const* -> char const*                                             *|
-    |*   returns nullptr if no match, otherwise pointer to first character of next token    *|
-    |* - typedef value_type of type that is contained within the tag                        *|
-    |* - cast operator to value_type                                                        *|
-    |*                                                                                      *|
-    \****************************************************************************************/
-    struct ContainerTag {};
+    struct ContainerTag
+    {
+        using ChatCommandResult = Trinity::Impl::ChatCommands::ChatCommandResult;
+    };
+
     template <typename T>
     struct tag_base<T, std::enable_if_t<std::is_base_of_v<ContainerTag, T>>>
     {
         using type = typename T::value_type;
     };
 
-    template <char c1, char... chars>
-    struct ExactSequence : public ContainerTag
+    template <std::size_t Size>
+    struct string_literal
+    {
+        constexpr string_literal(char const (&str)[Size])
+        {
+            std::ranges::copy_n(str, Size, value.begin());
+        }
+
+        constexpr operator std::string_view() const
+        {
+            return { value.data(), value.size() - 1 };
+        }
+
+        std::array<char, Size> value;
+    };
+
+    TC_GAME_API ChatCommandResult TryConsumExactSequencee(std::string_view sequence, ChatHandler const* handler, std::string_view args);
+}
+
+namespace Trinity::ChatCommands
+{
+    /************************** CONTAINER TAGS **********************************************\
+    |* Simple holder classes to differentiate between extraction methods                    *|
+    |* Must inherit from Trinity::Impl::ChatCommands::ContainerTag                          *|
+    |* Must implement the following:                                                        *|
+    |* - TryConsume: ChatHandler const*, std::string_view -> ChatCommandResult              *|
+    |*   - on match, returns tail of the provided argument string (as std::string_view)     *|
+    |*   - on specific error, returns error message (as std::string&& or char const*)       *|
+    |*   - on generic error, returns std::nullopt (this will print command usage)           *|
+    |*                                                                                      *|
+    |* - typedef value_type of type that is contained within the tag                        *|
+    |* - cast operator to value_type                                                        *|
+    |*                                                                                      *|
+    \****************************************************************************************/
+
+    template <Impl::ChatCommands::string_literal Sequence>
+    struct ExactSequence : Trinity::Impl::ChatCommands::ContainerTag
     {
         using value_type = void;
 
-        static char const* _TryConsume(char const* pos)
+        ChatCommandResult TryConsume(ChatHandler const* handler, std::string_view args) const
         {
-            if (*(pos++) == c1)
-            {
-                if constexpr (sizeof...(chars) > 0)
-                    return ExactSequence<chars...>::_TryConsume(pos);
-                else if (Trinity::Impl::ChatCommands::tokenize(pos)) /* we did not consume the entire token */
-                    return nullptr;
-                else
-                    return pos;
-            }
+            return Trinity::Impl::ChatCommands::TryConsumExactSequencee(Sequence, handler, args);
+        }
+    };
+
+#define EXACT_SEQUENCE(str) Trinity::ChatCommands::ExactSequence<str>
+
+    struct Tail : std::string_view, Trinity::Impl::ChatCommands::ContainerTag
+    {
+        using value_type = std::string_view;
+
+        using std::string_view::operator=;
+
+        ChatCommandResult TryConsume(ChatHandler const*,std::string_view args)
+        {
+            std::string_view::operator=(args);
+            return std::string_view();
+        }
+    };
+
+    struct WTail : std::wstring, Trinity::Impl::ChatCommands::ContainerTag
+    {
+        using value_type = std::wstring;
+
+        using std::wstring::operator=;
+
+        ChatCommandResult TryConsume(ChatHandler const* handler, std::string_view args)
+        {
+            if (Utf8toWStr(args, *this))
+                return std::string_view();
             else
-                return nullptr;
+                return Trinity::Impl::ChatCommands::GetTrinityString(handler, LANG_CMDPARSER_INVALID_UTF8);
+        }
+    };
+
+    struct QuotedString : std::string, Trinity::Impl::ChatCommands::ContainerTag
+    {
+        using value_type = std::string;
+
+        TC_GAME_API ChatCommandResult TryConsume(ChatHandler const* handler, std::string_view args);
+    };
+
+    struct TC_GAME_API AccountIdentifier : Trinity::Impl::ChatCommands::ContainerTag
+    {
+        using value_type = uint32;
+
+        AccountIdentifier() = default;
+        AccountIdentifier(WorldSession& session);
+
+        operator uint32() const { return _id; }
+        operator std::string const& () const { return _name; }
+        operator std::string_view() const { return _name; }
+
+        uint32 GetID() const { return _id; }
+        std::string const& GetName() const { return _name; }
+        bool IsConnected() const { return _session != nullptr; }
+        WorldSession* GetConnectedSession() { return _session; }
+
+        ChatCommandResult TryConsume(ChatHandler const* handler, std::string_view args);
+
+        static Optional<AccountIdentifier> FromTarget(ChatHandler* handler);
+
+    private:
+        uint32 _id = 0;
+        std::string _name;
+        WorldSession* _session = nullptr;
+    };
+
+    struct TC_GAME_API PlayerIdentifier : Trinity::Impl::ChatCommands::ContainerTag
+    {
+        using value_type = Player*;
+
+        PlayerIdentifier() = default;
+        PlayerIdentifier(Player& player);
+
+        operator ObjectGuid() const { return _guid; }
+        operator std::string const&() const { return _name; }
+        operator std::string_view() const { return _name; }
+
+        std::string const& GetName() const { return _name; }
+        ObjectGuid GetGUID() const { return _guid; }
+        bool IsConnected() const { return (_player != nullptr); }
+        Player* GetConnectedPlayer() const { return _player; }
+
+        ChatCommandResult TryConsume(ChatHandler const* handler, std::string_view args);
+
+        static Optional<PlayerIdentifier> FromTarget(ChatHandler* handler);
+        static Optional<PlayerIdentifier> FromSelf(ChatHandler* handler);
+        static Optional<PlayerIdentifier> FromTargetOrSelf(ChatHandler* handler)
+        {
+            if (Optional<PlayerIdentifier> fromTarget = FromTarget(handler))
+                return fromTarget;
+            else
+                return FromSelf(handler);
         }
 
-        char const* TryConsume(char const* pos) const { return ExactSequence::_TryConsume(pos); }
+    private:
+        std::string _name;
+        ObjectGuid _guid;
+        Player* _player = nullptr;
     };
 
     template <typename linktag>
-    struct Hyperlink : public ContainerTag
+    struct Hyperlink : Trinity::Impl::ChatCommands::ContainerTag
     {
         using value_type = typename linktag::value_type;
-        using storage_type = advstd::remove_cvref_t<value_type>;
+        using storage_type = std::remove_cvref_t<value_type>;
 
-        public:
-            operator value_type() const { return val; }
-            value_type operator*() const { return val; }
-            storage_type const* operator->() const { return &val; }
+        operator value_type() const { return val; }
+        value_type operator*() const { return val; }
+        storage_type const* operator->() const { return &val; }
 
-            char const* TryConsume(char const* pos)
-            {
-                Trinity::Hyperlinks::HyperlinkInfo info = Trinity::Hyperlinks::ParseHyperlink(pos);
-                // invalid hyperlinks cannot be consumed
-                if (!info)
-                    return nullptr;
+        ChatCommandResult TryConsume(ChatHandler const* handler, std::string_view args)
+        {
+            Trinity::Hyperlinks::HyperlinkInfo info = Trinity::Hyperlinks::ParseSingleHyperlink(args);
+            // invalid hyperlinks cannot be consumed
+            if (!info)
+                return std::nullopt;
 
-                // check if we got the right tag
-                if (info.tag.second != strlen(linktag::tag()))
-                    return nullptr;
-                if (strncmp(info.tag.first, linktag::tag(), strlen(linktag::tag())) != 0)
-                    return nullptr;
+            // check if we got the right tag
+            if (info.tag != linktag::tag())
+                return std::nullopt;
 
-                // store value
-                if (!linktag::StoreTo(val, info.data.first, info.data.second))
-                    return nullptr;
+            // store value
+            if (!linktag::StoreTo(val, info.data))
+                return Trinity::Impl::ChatCommands::GetTrinityString(handler, LANG_CMDPARSER_LINKDATA_INVALID);
 
-                // finally, skip to end of token
-                pos = info.next;
-                Trinity::Impl::ChatCommands::tokenize(pos);
+            // finally, skip any potential delimiters
+            auto [token, next] = Trinity::Impl::ChatCommands::tokenize(info.tail);
+            if (token.empty()) /* empty token = first character is delimiter, skip past it */
+                return next;
+            else
+                return info.tail;
+        }
 
-                // return final pos
-                return pos;
-            }
-
-        private:
-            storage_type val;
+    private:
+        storage_type val;
     };
 
     // pull in link tags for user convenience
     using namespace ::Trinity::Hyperlinks::LinkTags;
 }
-
-/************************** VARIANT TAG LOGIC *********************************\
-|* This has some special handling over in ChatCommand.h                       *|
-\******************************************************************************/
 
 namespace Trinity::Impl
 {
@@ -134,29 +244,29 @@ namespace Trinity::Impl
 namespace Trinity::ChatCommands
 {
     template <typename T1, typename... Ts>
+    concept HasVariantConversionOperators = !std::same_as<Impl::ChatCommands::tag_base_t<T1>, void>
+        && (std::assignable_from<Impl::ChatCommands::tag_base_t<T1>&, Impl::ChatCommands::tag_base_t<Ts>> && ...);
+
+    template <typename T1, typename... Ts>
     struct Variant : public std::variant<T1, Ts...>
     {
         using base = std::variant<T1, Ts...>;
 
-        using first_type = tag_base_t<T1>;
-        static constexpr bool have_operators = Trinity::Impl::ChatCommands::are_all_assignable<first_type, tag_base_t<Ts>...>::value;
+        using first_type = Impl::ChatCommands::tag_base_t<T1>;
 
-        template <bool C = have_operators>
-        std::enable_if_t<C, first_type> operator*() const
+        first_type operator*() const requires (HasVariantConversionOperators<T1, Ts...>)
         {
-            return visit(Trinity::Impl::CastToVisitor<first_type>());
+            return visit(Impl::CastToVisitor<first_type>());
         }
 
-        template <bool C = have_operators>
-        operator std::enable_if_t<C, first_type>() const
+        operator first_type() const requires (HasVariantConversionOperators<T1, Ts...>)
         {
             return operator*();
         }
 
-        template<bool C = have_operators>
-        operator std::enable_if_t<C && !std::is_same_v<first_type, size_t> && std::is_convertible_v<first_type, size_t>, size_t>() const
+        bool operator!() const requires (HasVariantConversionOperators<T1, Ts...>)
         {
-            return operator*();
+            return !**this;
         }
 
         template <typename T>
@@ -179,16 +289,6 @@ namespace Trinity::ChatCommands
         template <typename T>
         constexpr bool holds_alternative() const { return std::holds_alternative<T>(static_cast<base const&>(*this)); }
     };
-}
-
-/* make the correct operator<< to use explicit, because otherwise the compiler gets confused with the implicit std::variant conversion */
-namespace std
-{
-    template <typename... Ts>
-    auto operator<<(std::ostream& os, Trinity::ChatCommands::Variant<Ts...> const& v) -> std::enable_if_t<Trinity::ChatCommands::Variant<Ts...>::have_operators, std::ostream&>
-    {
-        return (os << *v);
-    }
 }
 
 #endif

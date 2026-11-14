@@ -27,13 +27,20 @@
 4 - Toravon the Ice Watcher event
 */
 
-ObjectData const creatureData[] =
+static constexpr ObjectData creatureData[] =
 {
     { NPC_ARCHAVON, DATA_ARCHAVON },
     { NPC_EMALON,   DATA_EMALON   },
     { NPC_KORALON,  DATA_KORALON  },
     { NPC_TORAVON,  DATA_TORAVON  },
-    { 0,            0,            }
+};
+
+static constexpr DungeonEncounterData encounters[] =
+{
+    { NPC_ARCHAVON, {{ 1126 }} },
+    { NPC_EMALON, {{ 1127 }} },
+    { NPC_KORALON, {{ 1128 }} },
+    { NPC_TORAVON, {{ 1129 }} }
 };
 
 class instance_vault_of_archavon : public InstanceMapScript
@@ -47,7 +54,8 @@ class instance_vault_of_archavon : public InstanceMapScript
             {
                 SetHeaders(DataHeader);
                 SetBossNumber(EncounterCount);
-                LoadObjectData(creatureData, nullptr);
+                LoadObjectData(creatureData, {});
+                LoadDungeonEncounterData(encounters);
 
                 ArchavonDeath   = 0;
                 EmalonDeath     = 0;

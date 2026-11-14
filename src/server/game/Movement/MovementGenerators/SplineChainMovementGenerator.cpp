@@ -28,7 +28,6 @@
 
 SplineChainMovementGenerator::SplineChainMovementGenerator(uint32 id, std::vector<SplineChainLink> const& chain, bool walk) : _id(id), _chain(chain), _chainSize(chain.size()), _walk(walk), _nextIndex(0), _nextFirstWP(0), _msToNext(0)
 {
-    Mode = MOTION_MODE_DEFAULT;
     Priority = MOTION_PRIORITY_NORMAL;
     Flags = MOVEMENTGENERATOR_FLAG_INITIALIZATION_PENDING;
     BaseUnitState = UNIT_STATE_ROAMING;
@@ -36,7 +35,6 @@ SplineChainMovementGenerator::SplineChainMovementGenerator(uint32 id, std::vecto
 
 SplineChainMovementGenerator::SplineChainMovementGenerator(SplineChainResumeInfo const& info) : _id(info.PointID), _chain(*info.Chain), _chainSize(info.Chain->size()), _walk(info.IsWalkMode), _nextIndex(info.SplineIndex), _nextFirstWP(info.PointIndex), _msToNext(info.TimeToNext)
 {
-    Mode = MOTION_MODE_DEFAULT;
     Priority = MOTION_PRIORITY_NORMAL;
 
     Flags = MOVEMENTGENERATOR_FLAG_INITIALIZATION_PENDING;
@@ -50,6 +48,8 @@ uint32 SplineChainMovementGenerator::SendPathSpline(Unit* owner, float velocity,
 {
     uint32 nodeCount = path.size();
     ASSERT(nodeCount > 1, "SplineChainMovementGenerator::SendPathSpline: Every path must have source & destination (size > 1)! (%s)", owner->GetGUID().ToString().c_str());
+
+    owner->AddUnitState(UNIT_STATE_ROAMING_MOVE);
 
     Movement::MoveSplineInit init(owner);
     if (nodeCount > 2)
@@ -66,56 +66,55 @@ uint32 SplineChainMovementGenerator::SendPathSpline(Unit* owner, float velocity,
 void SplineChainMovementGenerator::SendSplineFor(Unit* owner, uint32 index, uint32& duration)
 {
     ASSERT(index < _chainSize, "SplineChainMovementGenerator::SendSplineFor: referenced index (%u) higher than path size (%u)!", index, _chainSize);
-    TC_LOG_DEBUG("movement.splinechain", "SplineChainMovementGenerator::SendSplineFor: sending spline on index: %u. (%s)", index, owner->GetGUID().ToString().c_str());
+    TC_LOG_DEBUG("movement.splinechain", "SplineChainMovementGenerator::SendSplineFor: sending spline on index: {}. ({})", index, owner->GetGUID().ToString());
 
     SplineChainLink const& thisLink = _chain[index];
     uint32 actualDuration = SendPathSpline(owner, thisLink.Velocity, thisLink.Points);
     if (actualDuration != thisLink.ExpectedDuration)
     {
-        TC_LOG_DEBUG("movement.splinechain", "SplineChainMovementGenerator::SendSplineFor: sent spline on index: %u, duration: %u ms. Expected duration: %u ms (delta %d ms). Adjusting. (%s)", index, actualDuration, thisLink.ExpectedDuration, int32(actualDuration) - int32(thisLink.ExpectedDuration), owner->GetGUID().ToString().c_str());
+        TC_LOG_DEBUG("movement.splinechain", "SplineChainMovementGenerator::SendSplineFor: sent spline on index: {}, duration: {} ms. Expected duration: {} ms (delta {} ms). Adjusting. ({})", index, actualDuration, thisLink.ExpectedDuration, int32(actualDuration) - int32(thisLink.ExpectedDuration), owner->GetGUID().ToString());
         duration = uint32(double(actualDuration) / double(thisLink.ExpectedDuration) * duration);
     }
     else
     {
-        TC_LOG_DEBUG("movement.splinechain", "SplineChainMovementGenerator::SendSplineFor: sent spline on index %u, duration: %u ms. (%s)", index, actualDuration, owner->GetGUID().ToString().c_str());
+        TC_LOG_DEBUG("movement.splinechain", "SplineChainMovementGenerator::SendSplineFor: sent spline on index {}, duration: {} ms. ({})", index, actualDuration, owner->GetGUID().ToString());
     }
 }
 
-void SplineChainMovementGenerator::Initialize(Unit* owner)
+bool SplineChainMovementGenerator::Initialize(Unit* owner)
 {
     RemoveFlag(MOVEMENTGENERATOR_FLAG_INITIALIZATION_PENDING | MOVEMENTGENERATOR_FLAG_DEACTIVATED);
     AddFlag(MOVEMENTGENERATOR_FLAG_INITIALIZED);
 
     if (!_chainSize)
     {
-        TC_LOG_ERROR("movement", "SplineChainMovementGenerator::Initialize: couldn't initialize generator, referenced spline is empty! (%s)", owner->GetGUID().ToString().c_str());
-        return;
+        TC_LOG_ERROR("movement", "SplineChainMovementGenerator::Initialize: couldn't initialize generator, referenced spline is empty! ({})", owner->GetGUID().ToString());
+        return false;
     }
 
     if (_nextIndex >= _chainSize)
     {
-        TC_LOG_WARN("movement", "SplineChainMovementGenerator::Initialize: couldn't initialize generator, _nextIndex is >= _chainSize (%s)", owner->GetGUID().ToString().c_str());
+        TC_LOG_WARN("movement", "SplineChainMovementGenerator::Initialize: couldn't initialize generator, _nextIndex is >= _chainSize ({})", owner->GetGUID().ToString());
         _msToNext = 0;
-        return;
+        return false;
     }
 
     if (_nextFirstWP) // this is a resumed movegen that has to start with a partial spline
     {
         if (HasFlag(MOVEMENTGENERATOR_FLAG_FINALIZED))
-            return;
+            return false;
 
         SplineChainLink const& thisLink = _chain[_nextIndex];
         if (_nextFirstWP >= thisLink.Points.size())
         {
-            TC_LOG_ERROR("movement.splinechain", "SplineChainMovementGenerator::Initialize: attempted to resume spline chain from invalid resume state, _nextFirstWP >= path size (_nextIndex: %u, _nextFirstWP: %u). (%s)", _nextIndex, _nextFirstWP, owner->GetGUID().ToString().c_str());
+            TC_LOG_ERROR("movement.splinechain", "SplineChainMovementGenerator::Initialize: attempted to resume spline chain from invalid resume state, _nextFirstWP >= path size (_nextIndex: {}, _nextFirstWP: {}). ({})", _nextIndex, _nextFirstWP, owner->GetGUID().ToString());
             _nextFirstWP = thisLink.Points.size() - 1;
         }
 
-        owner->AddUnitState(UNIT_STATE_ROAMING_MOVE);
         Movement::PointsArray partial(thisLink.Points.begin() + (_nextFirstWP-1), thisLink.Points.end());
         SendPathSpline(owner, thisLink.Velocity, partial);
 
-        TC_LOG_DEBUG("movement.splinechain", "SplineChainMovementGenerator::Initialize: resumed spline chain generator from resume state. (%s)", owner->GetGUID().ToString().c_str());
+        TC_LOG_DEBUG("movement.splinechain", "SplineChainMovementGenerator::Initialize: resumed spline chain generator from resume state. ({})", owner->GetGUID().ToString());
 
         ++_nextIndex;
         if (_nextIndex >= _chainSize)
@@ -133,14 +132,15 @@ void SplineChainMovementGenerator::Initialize(Unit* owner)
         if (_nextIndex >= _chainSize)
             _msToNext = 0;
     }
+    return true;
 }
 
-void SplineChainMovementGenerator::Reset(Unit* owner)
+bool SplineChainMovementGenerator::Reset(Unit* owner)
 {
     RemoveFlag(MOVEMENTGENERATOR_FLAG_DEACTIVATED);
 
     owner->StopMoving();
-    Initialize(owner);
+    return Initialize(owner);
 }
 
 bool SplineChainMovementGenerator::Update(Unit* owner, uint32 diff)
@@ -162,7 +162,7 @@ bool SplineChainMovementGenerator::Update(Unit* owner, uint32 diff)
     if (_msToNext <= diff)
     {
         // Send next spline
-        TC_LOG_DEBUG("movement.splinechain", "SplineChainMovementGenerator::Update: sending spline on index %u (%u ms late). (%s)", _nextIndex, diff - _msToNext, owner->GetGUID().ToString().c_str());
+        TC_LOG_DEBUG("movement.splinechain", "SplineChainMovementGenerator::Update: sending spline on index {} ({} ms late). ({})", _nextIndex, diff - _msToNext, owner->GetGUID().ToString());
         _msToNext = std::max(_chain[_nextIndex].TimeToNext, 1u);
         SendSplineFor(owner, _nextIndex, _msToNext);
         ++_nextIndex;
@@ -174,7 +174,11 @@ bool SplineChainMovementGenerator::Update(Unit* owner, uint32 diff)
         }
     }
     else
+    {
         _msToNext -= diff;
+        if (owner->movespline->Finalized())
+            owner->ClearUnitState(UNIT_STATE_ROAMING_MOVE);
+    }
 
     return true;
 }

@@ -16,7 +16,6 @@
  */
 
 #include "ScriptMgr.h"
-#include "GameObject.h"
 #include "InstanceScript.h"
 #include "magisters_terrace.h"
 #include "MotionMaster.h"
@@ -26,7 +25,7 @@
 #include "SpellScript.h"
 #include "TemporarySummon.h"
 
-enum Says
+enum KaelthasTexts
 {
     // Kael'thas Sunstrider
     SAY_INTRO_1                 = 0,
@@ -40,7 +39,7 @@ enum Says
     SAY_DEATH                   = 8
 };
 
-enum Spells
+enum KaelthasSpells
 {
     // Kael'thas Sunstrider
     SPELL_FIREBALL                              = 44189,
@@ -54,7 +53,6 @@ enum Spells
     SPELL_GRAVITY_LAPSE_FLY                     = 44227,
     SPELL_GRAVITY_LAPSE_BEAM_VISUAL_PERIODIC    = 44251,
     SPELL_SUMMON_ARCANE_SPHERE                  = 44265,
-    SPELL_POWER_FEEDBACK                        = 44233,
     SPELL_FLAME_STRIKE                          = 46162,
     SPELL_SHOCK_BARRIER                         = 46165,
     SPELL_PYROBLAST                             = 36819,
@@ -86,9 +84,10 @@ uint32 gravityLapseTeleportSpells[] =
     SPELL_GRAVITY_LAPSE_RIGHT_TELEPORT
 };
 
+#define SPELL_POWER_FEEDBACK        DUNGEON_MODE<uint32>(44233, 47109)
 #define SPELL_GRAVITY_LAPSE_DAMAGE  DUNGEON_MODE<uint32>(49887, 44226)
 
-enum Events
+enum KaelthasEvents
 {
     // Kael'thas Sunstrider
     EVENT_TALK_INTRO_1 = 1,
@@ -119,7 +118,7 @@ enum Events
     EVENT_PREPARE_REENGAGE
 };
 
-enum Phases
+enum KaelthasPhases
 {
     PHASE_INTRO = 0,
     PHASE_ONE   = 1,
@@ -127,6 +126,7 @@ enum Phases
     PHASE_OUTRO = 3
 };
 
+// 24664 - Kael'thas Sunstrider
 struct boss_felblood_kaelthas : public BossAI
 {
     boss_felblood_kaelthas(Creature* creature) : BossAI(creature, DATA_KAELTHAS_SUNSTRIDER)
@@ -172,7 +172,7 @@ struct boss_felblood_kaelthas : public BossAI
         _DespawnAtEvade();
     }
 
-    void DamageTaken(Unit* attacker, uint32 &damage) override
+    void DamageTaken(Unit* attacker, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
         // Checking for lethal damage first so we trigger the outro phase without triggering phase two in case of oneshot attacks
         if (damage >= me->GetHealth() && !events.IsInPhase(PHASE_OUTRO))
@@ -379,6 +379,7 @@ private:
     bool _firstGravityLapse;
 };
 
+// 24674 - Phoenix
 struct npc_felblood_kaelthas_phoenix : public ScriptedAI
 {
     npc_felblood_kaelthas_phoenix(Creature* creature) : ScriptedAI(creature), _instance(creature->GetInstanceScript())
@@ -402,7 +403,7 @@ struct npc_felblood_kaelthas_phoenix : public ScriptedAI
 
     void JustEngagedWith(Unit* /*who*/) override { }
 
-    void DamageTaken(Unit* /*attacker*/, uint32 &damage) override
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
         if (damage >= me->GetHealth())
         {
@@ -411,7 +412,7 @@ struct npc_felblood_kaelthas_phoenix : public ScriptedAI
                 me->AttackStop();
                 me->SetReactState(REACT_PASSIVE);
                 me->RemoveAllAuras();
-                me->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                me->SetUninteractible(true);
                 DoCastSelf(SPELL_EMBER_BLAST);
                 // DoCastSelf(SPELL_SUMMON_PHOENIX_EGG); -- We do a manual summon for now. Feel free to move it to spelleffect_dbc
                 if (Creature* egg = DoSummon(NPC_PHOENIX_EGG, me->GetPosition(), 0s))
@@ -468,15 +469,13 @@ struct npc_felblood_kaelthas_phoenix : public ScriptedAI
                     _isInEgg = false;
                     DoCastSelf(SPELL_FULL_HEAL);
                     DoCastSelf(SPELL_BURN);
-                    me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                    me->SetUninteractible(false);
                     _events.ScheduleEvent(EVENT_ATTACK_PLAYERS, 2s);
                     break;
                 default:
                     break;
             }
         }
-
-        DoMeleeAttackIfReady();
     }
 private:
     InstanceScript* _instance;
@@ -485,10 +484,9 @@ private:
     ObjectGuid _eggGUID;
 };
 
+// 44191 - Flame Strike
 class spell_felblood_kaelthas_flame_strike : public AuraScript
 {
-    PrepareAuraScript(spell_felblood_kaelthas_flame_strike);
-
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
         return ValidateSpellInfo({ SPELL_FLAME_STRIKE_DAMAGE });
@@ -510,5 +508,5 @@ void AddSC_boss_felblood_kaelthas()
 {
     RegisterMagistersTerraceCreatureAI(boss_felblood_kaelthas);
     RegisterMagistersTerraceCreatureAI(npc_felblood_kaelthas_phoenix);
-    RegisterAuraScript(spell_felblood_kaelthas_flame_strike);
+    RegisterSpellScript(spell_felblood_kaelthas_flame_strike);
 }

@@ -23,11 +23,17 @@
 #include "GameObject.h"
 #include "InstanceScript.h"
 #include "Map.h"
+#include "PhasingHandler.h"
 #include "Player.h"
 
 BossBoundaryData const boundaries =
 {
-    { DATA_MALYGOS_EVENT, new CircleBoundary(Position(754.362f, 1301.609985f), 280.0) } // sanity check boundary
+    { DATA_MALYGOS_EVENT, new CircleBoundary(Position(754.362f, 1301.609985f), 280.0f) } // sanity check boundary
+};
+
+DungeonEncounterData const encounters[] =
+{
+    { DATA_MALYGOS_EVENT, {{ 1094 }} }
 };
 
 class instance_eye_of_eternity : public InstanceMapScript
@@ -47,12 +53,19 @@ public:
             SetHeaders(DataHeader);
             SetBossNumber(MAX_ENCOUNTER);
             LoadBossBoundaries(boundaries);
+            LoadDungeonEncounterData(encounters);
         }
 
         void OnPlayerEnter(Player* player) override
         {
             if (GetBossState(DATA_MALYGOS_EVENT) == DONE)
                 player->CastSpell(player, SPELL_SUMMOM_RED_DRAGON_BUDDY, true);
+        }
+
+        void OnPlayerLeave(Player* player) override
+        {
+            if (!player->IsAlive())
+                player->SetControlled(false, UNIT_STATE_ROOT);
         }
 
         bool SetBossState(uint32 type, EncounterState state) override
@@ -89,7 +102,7 @@ public:
         // There is no other way afaik...
         void SpawnGameObject(uint32 entry, Position const& pos)
         {
-            if (GameObject* go = GameObject::CreateGameObject(entry, instance, pos, QuaternionData::fromEulerAnglesZYX(pos.GetOrientation(), 0.0f, 0.0f), 255, GO_STATE_READY))
+            if (GameObject* go = GameObject::CreateGameObject(entry, instance, pos, QuaternionData::fromOrientation(pos.GetOrientation()), InitialPhaseShift(), 255, GO_STATE_READY))
                 instance->AddToMap(go);
         }
 
@@ -161,7 +174,7 @@ public:
                     alexstraszaBunny->CastSpell(alexstraszaBunny, SPELL_IRIS_OPENED);
 
                 if (GameObject* iris = instance->GetGameObject(irisGUID))
-                    iris->AddFlag(GO_FLAG_IN_USE);
+                    iris->SetFlag(GO_FLAG_IN_USE);
 
                 if (Creature* malygos = instance->GetCreature(malygosGUID))
                     malygos->AI()->DoAction(0); // ACTION_LAND_ENCOUNTER_START

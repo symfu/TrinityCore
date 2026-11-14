@@ -21,200 +21,165 @@
 #include "SpellInfo.h"
 #include "SpellScript.h"
 
-enum Spells
+enum KrystallusTexts
 {
-    SPELL_BOULDER_TOSS                          = 50843,
-    SPELL_GROUND_SPIKE                          = 59750,
-    SPELL_GROUND_SLAM                           = 50827,
-    SPELL_SHATTER                               = 50810,
-    SPELL_SHATTER_EFFECT                        = 50811,
-    SPELL_STONED                                = 50812,
-    SPELL_STOMP                                 = 48131
+    SAY_AGGRO                = 0,
+    SAY_SLAY                 = 1,
+    SAY_DEATH                = 2,
+    SAY_SHATTER              = 3
 };
 
-enum Yells
+enum KrystallusSpells
 {
-    SAY_AGGRO                                   = 0,
-    SAY_KILL                                    = 1,
-    SAY_DEATH                                   = 2,
-    SAY_SHATTER                                 = 3
+    SPELL_BOULDER_TOSS       = 50843,
+    SPELL_GROUND_SPIKE       = 59750,
+    SPELL_GROUND_SLAM        = 50827,
+    SPELL_SHATTER_EFFECT     = 50811,
+    SPELL_STONED             = 50812,
+    SPELL_STOMP              = 48131
 };
 
-enum Events
+#define SPELL_SHATTER DUNGEON_MODE<uint32>(50810,61546)
+
+enum KrystallusEvents
 {
-    EVENT_BOULDER_TOSS                          = 1,
+    EVENT_BOULDER_TOSS       = 1,
     EVENT_GROUND_SPIKE,
     EVENT_GROUND_SLAM,
     EVENT_STOMP,
     EVENT_SHATTER
 };
 
-class boss_krystallus : public CreatureScript
+// 27977 - Krystallus
+struct boss_krystallus : public BossAI
 {
-    public:
-        boss_krystallus() : CreatureScript("boss_krystallus") { }
+    boss_krystallus(Creature* creature) : BossAI(creature, DATA_KRYSTALLUS) { }
 
-        struct boss_krystallusAI : public BossAI
+    void JustEngagedWith(Unit* who) override
+    {
+        Talk(SAY_AGGRO);
+        BossAI::JustEngagedWith(who);
+
+        events.ScheduleEvent(EVENT_BOULDER_TOSS, 3s, 9s);
+        events.ScheduleEvent(EVENT_GROUND_SLAM, 15s, 18s);
+        events.ScheduleEvent(EVENT_STOMP, 20s, 29s);
+        if (IsHeroic())
+            events.ScheduleEvent(EVENT_GROUND_SPIKE, 9s, 14s);
+    }
+
+    void OnSpellCast(SpellInfo const* spell) override
+    {
+        if (spell->Id == SPELL_SHATTER)
+            Talk(SAY_SHATTER);
+    }
+
+    void KilledUnit(Unit* victim) override
+    {
+        if (victim->GetTypeId() == TYPEID_PLAYER)
+            Talk(SAY_SLAY);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        Talk(SAY_DEATH);
+        _JustDied();
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            boss_krystallusAI(Creature* creature) : BossAI(creature, DATA_KRYSTALLUS) { }
-
-            void Reset() override
+            switch (eventId)
             {
-                _Reset();
+                case EVENT_BOULDER_TOSS:
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 50.0f, true))
+                        DoCast(target, SPELL_BOULDER_TOSS);
+                    events.Repeat(9s, 15s);
+                    break;
+                case EVENT_GROUND_SPIKE:
+                    if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true))
+                        DoCast(target, SPELL_GROUND_SPIKE);
+                    events.Repeat(12s, 17s);
+                    break;
+                case EVENT_GROUND_SLAM:
+                    DoCastSelf(SPELL_GROUND_SLAM);
+                    events.ScheduleEvent(EVENT_SHATTER, 10s);
+                    events.Repeat(15s, 18s);
+                    break;
+                case EVENT_STOMP:
+                    DoCastSelf(SPELL_STOMP);
+                    events.Repeat(20s, 29s);
+                    break;
+                case EVENT_SHATTER:
+                    DoCastSelf(SPELL_SHATTER);
+                    break;
+                default:
+                    break;
             }
 
-            void JustEngagedWith(Unit* who) override
-            {
-                Talk(SAY_AGGRO);
-                BossAI::JustEngagedWith(who);
-
-                events.ScheduleEvent(EVENT_BOULDER_TOSS, 3s, 9s);
-                events.ScheduleEvent(EVENT_GROUND_SLAM, 15s, 18s);
-                events.ScheduleEvent(EVENT_STOMP, 20s, 29s);
-                if (IsHeroic())
-                    events.ScheduleEvent(EVENT_GROUND_SPIKE, 9s, 14s);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                // Return since we have no target
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
-                {
-                    switch (eventId)
-                    {
-                        case EVENT_BOULDER_TOSS:
-                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 50.0f, true))
-                                DoCast(target, SPELL_BOULDER_TOSS);
-                            events.ScheduleEvent(EVENT_BOULDER_TOSS, 9s, 15s);
-                            break;
-                        case EVENT_GROUND_SPIKE:
-                            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true))
-                                DoCast(target, SPELL_GROUND_SPIKE);
-                            events.ScheduleEvent(EVENT_GROUND_SPIKE, 12s, 17s);
-                            break;
-                        case EVENT_GROUND_SLAM:
-                            DoCast(me, SPELL_GROUND_SLAM);
-                            events.ScheduleEvent(EVENT_SHATTER, 10s);
-                            events.ScheduleEvent(EVENT_GROUND_SLAM, 15s, 18s);
-                            break;
-                        case EVENT_STOMP:
-                            DoCast(me, SPELL_STOMP);
-                            events.ScheduleEvent(EVENT_STOMP, 20s, 29s);
-                            break;
-                        case EVENT_SHATTER:
-                            DoCast(me, SPELL_SHATTER);
-                            break;
-                        default:
-                            break;
-                    }
-
-                    if (me->HasUnitState(UNIT_STATE_CASTING))
-                        return;
-                }
-
-                DoMeleeAttackIfReady();
-            }
-
-            void JustDied(Unit* /*killer*/) override
-            {
-                Talk(SAY_DEATH);
-                _JustDied();
-            }
-
-            void KilledUnit(Unit* victim) override
-            {
-                if (victim->GetTypeId() == TYPEID_PLAYER)
-                    Talk(SAY_KILL);
-            }
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetHallsOfStoneAI<boss_krystallusAI>(creature);
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
         }
+    }
 };
 
-class spell_krystallus_shatter : public SpellScriptLoader
+// 50810, 61546 - Shatter
+class spell_krystallus_shatter : public SpellScript
 {
-    public:
-        spell_krystallus_shatter() : SpellScriptLoader("spell_krystallus_shatter") { }
-
-        class spell_krystallus_shatter_SpellScript : public SpellScript
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        if (Unit* target = GetHitUnit())
         {
-            PrepareSpellScript(spell_krystallus_shatter_SpellScript);
-
-            void HandleScript(SpellEffIndex /*effIndex*/)
-            {
-                if (Unit* target = GetHitUnit())
-                {
-                    target->RemoveAurasDueToSpell(SPELL_STONED);
-                    target->CastSpell(nullptr, SPELL_SHATTER_EFFECT, true);
-                }
-            }
-
-            void Register() override
-            {
-                OnEffectHitTarget += SpellEffectFn(spell_krystallus_shatter_SpellScript::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
-            }
-        };
-
-        SpellScript* GetSpellScript() const override
-        {
-            return new spell_krystallus_shatter_SpellScript();
+            target->RemoveAurasDueToSpell(SPELL_STONED);
+            target->CastSpell(nullptr, SPELL_SHATTER_EFFECT, true);
         }
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget += SpellEffectFn(spell_krystallus_shatter::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
 };
 
-class spell_krystallus_shatter_effect : public SpellScriptLoader
+// 50811, 61547 - Shatter
+class spell_krystallus_shatter_effect : public SpellScript
 {
-    public:
-        spell_krystallus_shatter_effect() : SpellScriptLoader("spell_krystallus_shatter_effect") { }
+    bool Validate(SpellInfo const* spellInfo) override
+    {
+        return ValidateSpellEffect({ { spellInfo->Id, EFFECT_0 } });
+    }
 
-        class spell_krystallus_shatter_effect_SpellScript : public SpellScript
-        {
-            PrepareSpellScript(spell_krystallus_shatter_effect_SpellScript);
+    void CalculateDamage()
+    {
+        if (!GetHitUnit())
+            return;
 
-            bool Validate(SpellInfo const* spellInfo) override
-            {
-                return !spellInfo->GetEffects().empty();
-            }
+        float radius = GetEffectInfo(EFFECT_0).CalcRadius(GetCaster(), SpellTargetIndex::TargetB).Max;
+        if (radius <= 0.0f)
+            return;
 
-            void CalculateDamage()
-            {
-                if (!GetHitUnit())
-                    return;
+        float distance = GetCaster()->GetDistance2d(GetHitUnit());
+        if (distance > 1.0f)
+            SetHitDamage(int32(GetHitDamage() * ((radius - distance) / radius)));
+    }
 
-                float radius = GetSpellInfo()->GetEffect(EFFECT_0).CalcRadius(GetCaster());
-                if (!radius)
-                    return;
-
-                float distance = GetCaster()->GetDistance2d(GetHitUnit());
-                if (distance > 1.0f)
-                    SetHitDamage(int32(GetHitDamage() * ((radius - distance) / radius)));
-            }
-
-            void Register() override
-            {
-                OnHit += SpellHitFn(spell_krystallus_shatter_effect_SpellScript::CalculateDamage);
-            }
-        };
-
-        SpellScript* GetSpellScript() const override
-        {
-            return new spell_krystallus_shatter_effect_SpellScript();
-        }
+    void Register() override
+    {
+        OnHit += SpellHitFn(spell_krystallus_shatter_effect::CalculateDamage);
+    }
 };
 
 void AddSC_boss_krystallus()
 {
-    new boss_krystallus();
-    new spell_krystallus_shatter();
-    new spell_krystallus_shatter_effect();
+    RegisterHallsOfStoneCreatureAI(boss_krystallus);
+    RegisterSpellScript(spell_krystallus_shatter);
+    RegisterSpellScript(spell_krystallus_shatter_effect);
 }

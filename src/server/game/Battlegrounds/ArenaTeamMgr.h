@@ -28,20 +28,24 @@ private:
     ~ArenaTeamMgr();
 
 public:
+    ArenaTeamMgr(ArenaTeamMgr const&) = delete;
+    ArenaTeamMgr(ArenaTeamMgr&&) = delete;
+    ArenaTeamMgr& operator=(ArenaTeamMgr const&) = delete;
+    ArenaTeamMgr& operator=(ArenaTeamMgr&&) = delete;
+
     static ArenaTeamMgr* instance();
 
     typedef std::unordered_map<uint32, ArenaTeam*> ArenaTeamContainer;
 
     ArenaTeam* GetArenaTeamById(uint32 arenaTeamId) const;
-    ArenaTeam* GetArenaTeamByName(std::string const& arenaTeamName) const;
+    ArenaTeam* GetArenaTeamByName(std::string_view arenaTeamName) const;
     ArenaTeam* GetArenaTeamByCaptain(ObjectGuid guid) const;
 
     void LoadArenaTeams();
     void AddArenaTeam(ArenaTeam* arenaTeam);
     void RemoveArenaTeam(uint32 Id);
 
-    ArenaTeamContainer::iterator GetArenaTeamMapBegin() { return ArenaTeamStore.begin(); }
-    ArenaTeamContainer::iterator GetArenaTeamMapEnd()   { return ArenaTeamStore.end(); }
+    ArenaTeamContainer const& GetArenaTeams() const { return ArenaTeamStore; }
 
     uint32 GenerateArenaTeamId();
     void SetNextArenaTeamId(uint32 Id) { NextArenaTeamId = Id; }

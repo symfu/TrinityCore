@@ -31,17 +31,16 @@ enum AQTDataTypes
     DATA_SARTURA            = 1,
     DATA_FRANKRIS           = 2,
     DATA_HUHURAN            = 3,
-    DATA_TWIN_EMPERORS      = 4,
-    DATA_CTHUN              = 5,
+    DATA_TWIN_EMPERORS      = 4,      // Used in conditions for gossip menu options & texts (menu 6644)
+    DATA_CTHUN              = 5,      // Used in conditions for SAI (creatures 15378 - 15380)
     DATA_BUG_TRIO           = 6,
     DATA_VISCIDUS           = 7,
-    DATA_OURO               = 8,
+    DATA_OURO               = 8,      // Used in conditions for gossip menu options & texts (menu 6644)
 
     // Others
     DATA_KRI                = 9,
     DATA_VEM                = 10,
-    DATA_VEMISDEAD          = 11,
-    DATA_VEM_DEATH          = 12,
+    DATA_YAUJ               = 11,
     DATA_VEKLOR             = 13,
     DATA_VEKLORISDEAD       = 14,
     DATA_VEKLOR_DEATH       = 15,
@@ -71,6 +70,7 @@ enum AQTCreatures
     NPC_SKERAM              = 15263,
     NPC_VEM                 = 15544,
     NPC_KRI                 = 15511,
+    NPC_YAUJ                = 15543,
     NPC_VEKLOR              = 15276,
     NPC_VEKNILASH           = 15275,
     NPC_SARTURA             = 15516
@@ -88,5 +88,7 @@ inline AI* GetAQ40AI(T* obj)
 {
     return GetInstanceAI<AI>(obj, AQ40ScriptName);
 }
+
+#define RegisterAQ40CreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetAQ40AI)
 
 #endif

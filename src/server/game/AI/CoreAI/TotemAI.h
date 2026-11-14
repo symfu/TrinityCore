@@ -18,9 +18,7 @@
 #ifndef TRINITY_TOTEMAI_H
 #define TRINITY_TOTEMAI_H
 
-#include "CreatureAI.h"
 #include "PassiveAI.h"
-#include "Timer.h"
 
 class Creature;
 class Totem;
@@ -28,7 +26,7 @@ class Totem;
 class TC_GAME_API TotemAI : public NullCreatureAI
 {
     public:
-        explicit TotemAI(Creature* creature, uint32 scriptId = {});
+        explicit TotemAI(Creature* creature, uint32 scriptId = {}) noexcept;
 
         void AttackStart(Unit* victim) override;
 

@@ -35,10 +35,10 @@ enum TrinityStrings
     LANG_SYSTEMMESSAGE                    = 3,
     LANG_EVENTMESSAGE                     = 4,
     LANG_NO_HELP_CMD                      = 5,
-    LANG_NO_CMD                           = 6,
-    LANG_NO_SUBCMD                        = 7,
+    LANG_CMD_INVALID                      = 6,
+    LANG_SUBCMD_AMBIGUOUS                 = 7,
     LANG_SUBCMDS_LIST                     = 8,
-    LANG_AVIABLE_CMD                      = 9,
+    LANG_AVAILABLE_CMDS                   = 9,
     LANG_CMD_SYNTAX                       = 10,
     LANG_ACCOUNT_LEVEL                    = 11,
     LANG_CONNECTED_USERS                  = 12,
@@ -225,19 +225,18 @@ enum TrinityStrings
     LANG_PHASESHIFT_UI_WORLD_MAP_AREA_SWAPS = 182,
     LANG_PHASE_FLAG_COSMETIC              = 183,
     LANG_PHASE_FLAG_PERSONAL              = 184,
-
     //                                      185 not used
     LANG_TRANSPORT_POSITION               = 186,
     LANG_PARTIAL_GROUP_SUMMON             = 187,
     LANG_2FA_SECRET_TOO_LONG              = 188,
     LANG_2FA_SECRET_INVALID               = 189,
     LANG_2FA_SECRET_SET_COMPLETE          = 190,
-    LANG_SUBCMDS_LIST_ENTRY               = 191, // 3.3.5 RESERVED
-    LANG_SUBCMDS_LIST_ENTRY_ELLIPSIS      = 192, // 3.3.5 RESERVED
-    LANG_SUBCMD_INVALID                   = 193, // 3.3.5 RESERVED
-    LANG_CMD_AMBIGUOUS                    = 194, // 3.3.5 RESERVED
-    LANG_CMD_HELP_GENERIC                 = 195, // 3.3.5 RESERVED
-    LANG_CMD_NO_HELP_AVAILABLE            = 196, // 3.3.5 RESERVED
+    LANG_SUBCMDS_LIST_ENTRY               = 191,
+    LANG_SUBCMDS_LIST_ENTRY_ELLIPSIS      = 192,
+    LANG_SUBCMD_INVALID                   = 193,
+    LANG_CMD_AMBIGUOUS                    = 194,
+    LANG_CMD_HELP_GENERIC                 = 195,
+    LANG_CMD_NO_HELP_AVAILABLE            = 196,
     // Room for more level 1                197-199 not used
 
     // level 2 chat
@@ -259,7 +258,7 @@ enum TrinityStrings
     LANG_RESET_TALENTS_ONLINE             = 213,
     LANG_RESET_TALENTS_OFFLINE            = 214,
     LANG_RESET_SPELLS                     = 215,
-    LANG_RESET_TALENTS                    = 216,
+    // unused                             = 216,
 
     LANG_RESETALL_UNKNOWN_CASE            = 217,
     LANG_RESETALL_SPELLS                  = 218,
@@ -344,8 +343,8 @@ enum TrinityStrings
     LANG_COMMAND_NPC_SHOWLOOT_MONEY       = 292,
     LANG_COMMAND_NPC_SHOWLOOT_LABEL_2     = 293,
     LANG_COMMAND_NPC_SHOWLOOT_SUBLABEL    = 294,
-    LANG_COMMAND_NPC_SHOWLOOT_ENTRY_2     = 295,
-      // 296 free
+    LANG_COMMAND_NPC_SHOWLOOT_TRACKING_QUEST = 295,
+    LANG_COMMAND_NPC_SHOWLOOT_CURRENCY    = 296,
 
       // END
     LANG_COMMAND_WANDER_DISTANCE          = 297,
@@ -418,37 +417,41 @@ enum TrinityStrings
     LANG_COMMAND_CHEAT_WW                 = 362,
     LANG_COMMAND_WHISPEROFFPLAYER         = 363,
     LANG_COMMAND_CHEAT_TAXINODES          = 364,
-    LANG_COMMAND_ACHIEVEMENT_ADD_HELP     = 365, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_SET_ADDON_HELP       = 366, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_SET_SEC_REGMAIL_HELP = 367, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_SET_SEC_EMAIL_HELP   = 368, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_SET_2FA_HELP         = 369, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_SET_SECLEVEL_HELP    = 370, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_SET_PASSWORD_HELP    = 371, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_2FA_SETUP_HELP       = 372, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_2FA_REMOVE_HELP      = 373, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_ADDON_HELP           = 374, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_CREATE_HELP          = 375, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_DELETE_HELP          = 376, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_EMAIL_HELP           = 377, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_ONLINELIST_HELP      = 378, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_LOCK_COUNTRY_HELP    = 379, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_LOCK_IP_HELP         = 380, // 3.3.5 RESERVED
-    LANG_COMMAND_ACC_PASSWORD_HELP        = 381, // 3.3.5 RESERVED
-    LANG_COMMAND_ACCOUNT_HELP             = 382, // 3.3.5 RESERVED
-    LANG_COMMAND_LEARN_HELP               = 383, // 3.3.5 RESERVED
-    LANG_COMMAND_UNLEARN_HELP             = 384, // 3.3.5 RESERVED
-    LANG_COMMAND_LEARN_MY_QUESTS_HELP     = 385, // 3.3.5 RESERVED
-    LANG_COMMAND_LEARN_MY_TRAINER_HELP    = 386, // 3.3.5 RESERVED
-    LANG_COMMAND_LEARN_ALL_BLIZZARD_HELP  = 387, // 3.3.5 RESERVED
-    LANG_COMMAND_LEARN_ALL_DEBUG_HELP     = 388, // 3.3.5 RESERVED
-    LANG_COMMAND_LEARN_ALL_CRAFTS_HELP    = 389, // 3.3.5 RESERVED
-    LANG_COMMAND_LEARN_ALL_DEFAULT_HELP   = 390, // 3.3.5 RESERVED
-    LANG_COMMAND_LEARN_ALL_LANGUAGES_HELP = 391, // 3.3.5 RESERVED
-    LANG_COMMAND_LEARN_ALL_RECIPES_HELP   = 392, // 3.3.5 RESERVED
-    LANG_COMMAND_LEARN_ALL_TALENTS_HELP   = 393, // 3.3.5 RESERVED
-    LANG_COMMAND_LEARN_ALL_PETTALENT_HELP = 394, // 3.3.5 RESERVED
-    // Room for more level 2                395-399 not used
+    LANG_COMMAND_ACHIEVEMENT_ADD_HELP     = 365,
+    LANG_COMMAND_ACC_SET_ADDON_HELP       = 366,
+    LANG_COMMAND_ACC_SET_SEC_REGMAIL_HELP = 367,
+    LANG_COMMAND_ACC_SET_SEC_EMAIL_HELP   = 368,
+    LANG_COMMAND_ACC_SET_2FA_HELP         = 369,
+    LANG_COMMAND_ACC_SET_SECLEVEL_HELP    = 370,
+    LANG_COMMAND_ACC_SET_PASSWORD_HELP    = 371,
+    LANG_COMMAND_ACC_2FA_SETUP_HELP       = 372,
+    LANG_COMMAND_ACC_2FA_REMOVE_HELP      = 373,
+    LANG_COMMAND_ACC_ADDON_HELP           = 374,
+    LANG_COMMAND_ACC_CREATE_HELP          = 375,
+    LANG_COMMAND_ACC_DELETE_HELP          = 376,
+    LANG_COMMAND_ACC_EMAIL_HELP           = 377,
+    LANG_COMMAND_ACC_ONLINELIST_HELP      = 378,
+    LANG_COMMAND_ACC_LOCK_COUNTRY_HELP    = 379,
+    LANG_COMMAND_ACC_LOCK_IP_HELP         = 380,
+    LANG_COMMAND_ACC_PASSWORD_HELP        = 381,
+    LANG_COMMAND_ACCOUNT_HELP             = 382,
+    LANG_COMMAND_LEARN_HELP               = 383,
+    LANG_COMMAND_UNLEARN_HELP             = 384,
+    LANG_COMMAND_LEARN_MY_QUESTS_HELP     = 385,
+    LANG_COMMAND_LEARN_MY_TRAINER_HELP    = 386,
+    LANG_COMMAND_LEARN_ALL_BLIZZARD_HELP  = 387,
+    LANG_COMMAND_LEARN_ALL_DEBUG_HELP     = 388,
+    LANG_COMMAND_LEARN_ALL_CRAFTS_HELP    = 389,
+    LANG_COMMAND_LEARN_ALL_DEFAULT_HELP   = 390,
+    LANG_COMMAND_LEARN_ALL_LANGUAGES_HELP = 391,
+    LANG_COMMAND_LEARN_ALL_RECIPES_HELP   = 392,
+    LANG_COMMAND_LEARN_ALL_TALENTS_HELP   = 393,
+    LANG_COMMAND_LEARN_ALL_PETTALENT_HELP = 394,
+    LANG_COMMAND_BG_START_HELP            = 395,
+    LANG_COMMAND_BG_STOP_HELP             = 396,
+    LANG_CHANGEFACTION_NOT_ELIGIBLE_10    = 397,
+    LANG_CHANGEFACTION_NOT_ELIGIBLE_60    = 398,
+    // Room for more level 2                399 not used
 
     // level 3 chat
     LANG_SCRIPTS_RELOADED                 = 400,
@@ -736,10 +739,10 @@ enum TrinityStrings
     LANG_DIST_ARENA_POINTS_END            = 746, // 3.3.5 RESERVED
     LANG_BG_DISABLED                      = 747,
     LANG_ARENA_DISABLED                   = 748,
-//                                        = 749, see LANG_PINFO_ACC_OS
-    LANG_BATTLEGROUND_PREMATURE_FINISH_WARNING = 750,       // "Not enough players. This game will close in %u mins."
-    LANG_BATTLEGROUND_PREMATURE_FINISH_WARNING_SECS = 751,  // "Not enough players. This game will close in %u seconds."
-//                                        = 752, see LANG_PINFO_ACC_IP
+    //                                    = 749, see LANG_PINFO_ACC_OS
+    //                                    = 750,
+    //                                    = 751,
+    //                                    = 752, see LANG_PINFO_ACC_IP
     // 753-755 - free
 
     // Room for BG/ARENA                  = 773-784
@@ -759,7 +762,7 @@ enum TrinityStrings
     LANG_NEED_CHARACTER_NAME              = 807,
     LANG_PLAYER_NOT_EXIST_OR_OFFLINE      = 808,
     LANG_ACCOUNT_FOR_PLAYER_NOT_FOUND     = 809,
-    // unused                             = 810,
+    LANG_BANK_TAB_NAME                    = 810,
     LANG_GUILD_MASTER                     = 811,
     LANG_GUILD_OFFICER                    = 812,
     LANG_GUILD_VETERAN                    = 813,
@@ -804,7 +807,7 @@ enum TrinityStrings
     LANG_ARENA_ERROR_NAME_EXISTS          = 858,
     LANG_ARENA_ERROR_SIZE                 = 859,
     LANG_ARENA_ERROR_COMBAT               = 860,
-    LANG_AREAN_ERROR_NAME_NOT_FOUND       = 861,
+    LANG_ARENA_ERROR_NAME_NOT_FOUND       = 861,
     LANG_ARENA_ERROR_NOT_MEMBER           = 862,
     LANG_ARENA_ERROR_CAPTAIN              = 863,
     LANG_ARENA_CREATE                     = 864,
@@ -826,8 +829,9 @@ enum TrinityStrings
     LANG_ACCOUNT_SEC_TYPE                 = 880,
     LANG_RBAC_EMAIL_REQUIRED              = 881,
     //                                    = 882, LANG_PINFO_CHR_MAP_WITH_AREA
-    LANG_ACCOUNT                          = 883, // 3.3.5 RESERVED
-    // Room for in-game strings             884-999 not used
+    LANG_ACCOUNT                          = 883,
+    LANG_COMMAND_QUEST_OBJECTIVE_NOTFOUND = 884,
+    // Room for in-game strings             885-999 not used
 
     // Level 4 (CLI only commands)
     LANG_COMMAND_EXIT                     = 1000,
@@ -895,7 +899,7 @@ enum TrinityStrings
     LANG_NO_PET_FOUND                     = 1123,
     LANG_WRONG_PET_TYPE                   = 1124,
     LANG_COMMAND_LEARN_PET_TALENTS        = 1125,
-    LANG_RESET_PET_TALENTS                = 1126,
+    // unused                             = 1126,
     LANG_RESET_PET_TALENTS_ONLINE         = 1127,
     LANG_TAXINODE_ENTRY_LIST_CHAT         = 1128,
     LANG_TAXINODE_ENTRY_LIST_CONSOLE      = 1129,
@@ -991,27 +995,37 @@ enum TrinityStrings
     LANG_ACCOUNT_BNET_UNLINKED            = 1216,
     LANG_ACCOUNT_BNET_NOT_LINKED          = 1217,
     LANG_DISALLOW_TICKETS_CONFIG          = 1218,
-    // 1219-1499 - free
+
+    // Guild list (.guild list)
+    LANG_GUILD_LIST_TITLE                 = 1219,
+    LANG_GUILD_LIST_HEADER                = 1220,
+    LANG_GUILD_LIST_ROW                   = 1221,
+    LANG_GUILD_LIST_TOTAL                 = 1222,
+    // 1223-1499 - free
 
     // Command argument parsers
-    LANG_CMDPARSER_EITHER                 = 1500, // 3.3.5 RESERVED
-    LANG_CMDPARSER_OR                     = 1501, // 3.3.5 RESERVED
-    LANG_CMDPARSER_STRING_VALUE_INVALID   = 1502, // 3.3.5 RESERVED
-    LANG_CMDPARSER_INVALID_UTF8           = 1503, // 3.3.5 RESERVED
-    LANG_CMDPARSER_LINKDATA_INVALID       = 1504, // 3.3.5 RESERVED
-    LANG_CMDPARSER_ACCOUNT_NAME_NO_EXIST  = 1505, // 3.3.5 RESERVED
-    LANG_CMDPARSER_ACCOUNT_ID_NO_EXIST    = 1506, // 3.3.5 RESERVED
-    LANG_CMDPARSER_CHAR_GUID_NO_EXIST     = 1507, // 3.3.5 RESERVED
-    LANG_CMDPARSER_CHAR_NAME_NO_EXIST     = 1508, // 3.3.5 RESERVED
-    LANG_CMDPARSER_CHAR_NAME_INVALID      = 1509, // 3.3.5 RESERVED
-    LANG_CMDPARSER_ACHIEVEMENT_NO_EXIST   = 1510, // 3.3.5 RESERVED
-    LANG_CMDPARSER_GAME_TELE_ID_NO_EXIST  = 1511, // 3.3.5 RESERVED
-    LANG_CMDPARSER_GAME_TELE_NO_EXIST     = 1512, // 3.3.5 RESERVED
-    LANG_CMDPARSER_ITEM_NO_EXIST          = 1513, // 3.3.5 RESERVED
-    LANG_CMDPARSER_SPELL_NO_EXIST         = 1514, // 3.3.5 RESERVED
-    LANG_CMDPARSER_EXACT_SEQ_MISMATCH     = 1515, // 3.3.5 RESERVED
+    LANG_CMDPARSER_EITHER                 = 1500,
+    LANG_CMDPARSER_OR                     = 1501,
+    LANG_CMDPARSER_STRING_VALUE_INVALID   = 1502,
+    LANG_CMDPARSER_INVALID_UTF8           = 1503,
+    LANG_CMDPARSER_LINKDATA_INVALID       = 1504,
+    LANG_CMDPARSER_ACCOUNT_NAME_NO_EXIST  = 1505,
+    LANG_CMDPARSER_ACCOUNT_ID_NO_EXIST    = 1506,
+    LANG_CMDPARSER_CHAR_GUID_NO_EXIST     = 1507,
+    LANG_CMDPARSER_CHAR_NAME_NO_EXIST     = 1508,
+    LANG_CMDPARSER_CHAR_NAME_INVALID      = 1509,
+    LANG_CMDPARSER_ACHIEVEMENT_NO_EXIST   = 1510,
+    LANG_CMDPARSER_GAME_TELE_ID_NO_EXIST  = 1511,
+    LANG_CMDPARSER_GAME_TELE_NO_EXIST     = 1512,
+    LANG_CMDPARSER_ITEM_NO_EXIST          = 1513,
+    LANG_CMDPARSER_SPELL_NO_EXIST         = 1514,
+    LANG_CMDPARSER_EXACT_SEQ_MISMATCH     = 1515,
+    LANG_CMDPARSER_CURRENCY_NO_EXIST      = 1516,
+    LANG_CMDPARSER_QUEST_NO_EXIST         = 1517,
 
-    // 1516-1998 - free
+    // 1516-1996 - free
+    LANG_DEBUG_AREATRIGGER_ENTITY_ENTERED = 1997,
+    LANG_DEBUG_AREATRIGGER_ENTITY_LEFT    = 1998,
     LANG_DEBUG_AREATRIGGER_LEFT           = 1999,
     // Ticket Strings 2000-2030
     LANG_COMMAND_TICKETNEW                = 2000, // 3.3.5 RESERVED
@@ -1097,14 +1111,14 @@ enum TrinityStrings
     // Instance commands
     LANG_COMMAND_LIST_BIND_INFO           = 5045,
     LANG_COMMAND_LIST_BIND_PLAYER_BINDS   = 5046,
-    LANG_COMMAND_LIST_BIND_GROUP_BINDS    = 5047,
+    LANG_COMMAND_INST_UNBIND_FAILED       = 5047,
     LANG_COMMAND_INST_UNBIND_UNBINDING    = 5048,
     LANG_COMMAND_INST_UNBIND_UNBOUND      = 5049,
     LANG_COMMAND_INST_STAT_LOADED_INST    = 5050,
     LANG_COMMAND_INST_STAT_PLAYERS_IN     = 5051,
     LANG_COMMAND_INST_STAT_SAVES          = 5052,
     LANG_COMMAND_INST_STAT_PLAYERSBOUND   = 5053,
-    LANG_COMMAND_INST_STAT_GROUPSBOUND    = 5054,
+    LANG_COMMAND_INST_STAT_GROUPSBOUND    = 5054, // 3.3.5 RESERVED
     LANG_NOT_DUNGEON                      = 5055, // Map is not a dungeon.
     LANG_NO_INSTANCE_DATA                 = 5056, // Map has no instance data.
     LANG_COMMAND_INST_SET_BOSS_STATE      = 5057,
@@ -1145,8 +1159,9 @@ enum TrinityStrings
     LANG_NPCINFO_NPC_FLAGS                = 5086,
     LANG_NPCINFO_PHASE_IDS                = 5087,
     LANG_SCENARIO                         = 5088,
+    LANG_OBJECTINFO_STRINGIDS             = 5089,
 
-    // Room for more Trinity strings        5089-6603
+    // Room for more Trinity strings        5090-6603
 
     // Level requirement notifications
     LANG_SAY_REQ                          = 6604,
@@ -1202,7 +1217,11 @@ enum TrinityStrings
     LANG_OPVP_ZM_GOSSIP_ALLIANCE          = 10054,
     LANG_OPVP_ZM_GOSSIP_HORDE             = 10055,
 
-    // 10056-10066 - free
+    // Deephaul Ravine
+    LANG_BG_DR_CRYSTAL_TAKEN              = 10056,
+    LANG_BG_DR_CRYSTAL_TAKEN_TUTORIAL     = 10057,
+
+    // 10058-10066 - free
 
     // Use for custom patches               11000-11999
     LANG_AUTO_BROADCAST                   = 11000,

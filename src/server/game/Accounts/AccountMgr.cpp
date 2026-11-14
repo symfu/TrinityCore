@@ -22,12 +22,14 @@
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
-#include "Realm.h"
+#include "RealmList.h"
 #include "ScriptMgr.h"
 #include "SRP6.h"
 #include "Util.h"
 #include "World.h"
 #include "WorldSession.h"
+
+using AccountSRP6 = Trinity::Crypto::SRP::GruntSRP6;
 
 AccountMgr::AccountMgr() { }
 
@@ -44,7 +46,7 @@ AccountMgr* AccountMgr::instance()
 
 AccountOpResult AccountMgr::CreateAccount(std::string username, std::string password, std::string email /*= ""*/, uint32 bnetAccountId /*= 0*/, uint8 bnetIndex /*= 0*/)
 {
-    if (utf8length(username) > MAX_ACCOUNT_STR)
+    if (utf8length(username) > MAX_ACCOUNT_STR[sWorld->getBoolConfig(CONFIG_EXTENDED_ACCOUNT_NAME_LENGTH_LIMIT)] || username.length() > MAX_ACCOUNT_NAME_BYTES)
         return AccountOpResult::AOR_NAME_TOO_LONG;                           // username's too long
 
     if (utf8length(password) > MAX_PASS_STR)
@@ -60,9 +62,9 @@ AccountOpResult AccountMgr::CreateAccount(std::string username, std::string pass
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_INS_ACCOUNT);
 
     stmt->setString(0, username);
-    std::pair<Trinity::Crypto::SRP6::Salt, Trinity::Crypto::SRP6::Verifier> registrationData = Trinity::Crypto::SRP6::MakeRegistrationData(username, password);
-    stmt->setBinary(1, registrationData.first);
-    stmt->setBinary(2, registrationData.second);
+    auto [salt, verifier] = Trinity::Crypto::SRP6::MakeRegistrationData<AccountSRP6>(username, password);
+    stmt->setBinary(1, salt);
+    stmt->setBinary(2, std::move(verifier));
     stmt->setString(3, email);
     stmt->setString(4, email);
 
@@ -133,6 +135,10 @@ AccountOpResult AccountMgr::DeleteAccount(uint32 accountId)
     stmt->setUInt32(0, accountId);
     CharacterDatabase.Execute(stmt);
 
+    stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_ACCOUNT_INSTANCE_LOCK_TIMES);
+    stmt->setUInt32(0, accountId);
+    CharacterDatabase.Execute(stmt);
+
     LoginDatabaseTransaction trans = LoginDatabase.BeginTransaction();
 
     loginStmt = LoginDatabase.GetPreparedStatement(LOGIN_DEL_ACCOUNT);
@@ -160,13 +166,6 @@ AccountOpResult AccountMgr::DeleteAccount(uint32 accountId)
     return AccountOpResult::AOR_OK;
 }
 
-// Do not use this. Use the appropriate methods on Trinity::Crypto::SRP6 to do whatever you are trying to do.
-// See issue #25157.
-static std::string CalculateShaPassHash_DEPRECATED_DONOTUSE(std::string const& name, std::string const& password)
-{
-    return ByteArrayToHexStr(Trinity::Crypto::SHA1::GetDigestOf(name, ":", password));
-}
-
 AccountOpResult AccountMgr::ChangeUsername(uint32 accountId, std::string newUsername, std::string newPassword)
 {
     // Check if accounts exists
@@ -177,7 +176,7 @@ AccountOpResult AccountMgr::ChangeUsername(uint32 accountId, std::string newUser
     if (!result)
         return AccountOpResult::AOR_NAME_NOT_EXIST;
 
-    if (utf8length(newUsername) > MAX_ACCOUNT_STR)
+    if (utf8length(newUsername) > MAX_ACCOUNT_STR[sWorld->getBoolConfig(CONFIG_EXTENDED_ACCOUNT_NAME_LENGTH_LIMIT)] || newUsername.length() > MAX_ACCOUNT_NAME_BYTES)
         return AccountOpResult::AOR_NAME_TOO_LONG;
 
     if (utf8length(newPassword) > MAX_PASS_STR)
@@ -191,20 +190,12 @@ AccountOpResult AccountMgr::ChangeUsername(uint32 accountId, std::string newUser
     stmt->setUInt32(1, accountId);
     LoginDatabase.Execute(stmt);
 
-    std::pair<Trinity::Crypto::SRP6::Salt, Trinity::Crypto::SRP6::Verifier> registrationData = Trinity::Crypto::SRP6::MakeRegistrationData(newUsername, newPassword);
+    auto [salt, verifier] = Trinity::Crypto::SRP6::MakeRegistrationData<AccountSRP6>(newUsername, newPassword);
     stmt = LoginDatabase.GetPreparedStatement(LOGIN_UPD_LOGON);
-    stmt->setBinary(0, registrationData.first);
-    stmt->setBinary(1, registrationData.second);
+    stmt->setBinary(0, salt);
+    stmt->setBinary(1, std::move(verifier));
     stmt->setUInt32(2, accountId);
     LoginDatabase.Execute(stmt);
-
-    if (sWorld->getBoolConfig(CONFIG_SET_SHAPASSHASH))
-    {
-        LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_UPD_LOGON_LEGACY);
-        stmt->setString(0, CalculateShaPassHash_DEPRECATED_DONOTUSE(newUsername, newPassword));
-        stmt->setUInt32(1, accountId);
-        LoginDatabase.Execute(stmt);
-    }
 
     return AccountOpResult::AOR_OK;
 }
@@ -227,21 +218,13 @@ AccountOpResult AccountMgr::ChangePassword(uint32 accountId, std::string newPass
 
     Utf8ToUpperOnlyLatin(username);
     Utf8ToUpperOnlyLatin(newPassword);
-    std::pair<Trinity::Crypto::SRP6::Salt, Trinity::Crypto::SRP6::Verifier> registrationData = Trinity::Crypto::SRP6::MakeRegistrationData(username, newPassword);
+    auto [salt, verifier] = Trinity::Crypto::SRP6::MakeRegistrationData<AccountSRP6>(username, newPassword);
 
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_UPD_LOGON);
-    stmt->setBinary(0, registrationData.first);
-    stmt->setBinary(1, registrationData.second);
+    stmt->setBinary(0, salt);
+    stmt->setBinary(1, std::move(verifier));
     stmt->setUInt32(2, accountId);
     LoginDatabase.Execute(stmt);
-
-    if (sWorld->getBoolConfig(CONFIG_SET_SHAPASSHASH))
-    {
-        LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_UPD_LOGON_LEGACY);
-        stmt->setString(0, CalculateShaPassHash_DEPRECATED_DONOTUSE(username, newPassword));
-        stmt->setUInt32(1, accountId);
-        LoginDatabase.Execute(stmt);
-    }
 
     sScriptMgr->OnPasswordChange(accountId);
     return AccountOpResult::AOR_OK;
@@ -307,7 +290,7 @@ AccountOpResult AccountMgr::ChangeRegEmail(uint32 accountId, std::string newEmai
     return AccountOpResult::AOR_OK;
 }
 
-uint32 AccountMgr::GetId(std::string const& username)
+uint32 AccountMgr::GetId(std::string_view username)
 {
     LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_GET_ACCOUNT_ID_BY_USERNAME);
     stmt->setString(0, username);
@@ -367,6 +350,25 @@ bool AccountMgr::GetEmail(uint32 accountId, std::string& email)
     return false;
 }
 
+bool AccountMgr::CheckPassword(std::string username, std::string password)
+{
+    Utf8ToUpperOnlyLatin(username);
+    Utf8ToUpperOnlyLatin(password);
+
+    LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_CHECK_PASSWORD_BY_NAME);
+    stmt->setString(0, username);
+
+    if (PreparedQueryResult result = LoginDatabase.Query(stmt))
+    {
+        Trinity::Crypto::SRP::Salt salt = (*result)[0].GetBinary<Trinity::Crypto::SRP::SALT_LENGTH>();
+        Trinity::Crypto::SRP::Verifier verifier = (*result)[1].GetBinary();
+        if (AccountSRP6(username, salt, verifier).CheckCredentials(username, password))
+            return true;
+    }
+
+    return false;
+}
+
 bool AccountMgr::CheckPassword(uint32 accountId, std::string password)
 {
     std::string username;
@@ -382,9 +384,9 @@ bool AccountMgr::CheckPassword(uint32 accountId, std::string password)
 
     if (PreparedQueryResult result = LoginDatabase.Query(stmt))
     {
-        Trinity::Crypto::SRP6::Salt salt = (*result)[0].GetBinary<Trinity::Crypto::SRP6::SALT_LENGTH>();
-        Trinity::Crypto::SRP6::Verifier verifier = (*result)[1].GetBinary<Trinity::Crypto::SRP6::VERIFIER_LENGTH>();
-        if (Trinity::Crypto::SRP6::CheckLogin(username, password, salt, verifier))
+        Trinity::Crypto::SRP::Salt salt = (*result)[0].GetBinary<Trinity::Crypto::SRP::SALT_LENGTH>();
+        Trinity::Crypto::SRP::Verifier verifier = (*result)[1].GetBinary();
+        if (AccountSRP6(username, salt, verifier).CheckCredentials(username, password))
             return true;
     }
 
@@ -496,7 +498,7 @@ void AccountMgr::LoadRBAC()
         uint32 linkedPermissionId = field[1].GetUInt32();
         if (linkedPermissionId == permissionId)
         {
-            TC_LOG_ERROR("sql.sql", "RBAC Permission %u has itself as linked permission. Ignored", permissionId);
+            TC_LOG_ERROR("sql.sql", "RBAC Permission {} has itself as linked permission. Ignored", permissionId);
             continue;
         }
         permission->AddLinkedPermission(linkedPermissionId);
@@ -505,7 +507,7 @@ void AccountMgr::LoadRBAC()
     while (result->NextRow());
 
     TC_LOG_DEBUG("rbac", "AccountMgr::LoadRBAC: Loading default permissions");
-    result = LoginDatabase.PQuery("SELECT secId, permissionId FROM rbac_default_permissions WHERE (realmId = %u OR realmId = -1) ORDER BY secId ASC", realm.Id.Realm);
+    result = LoginDatabase.PQuery("SELECT secId, permissionId FROM rbac_default_permissions WHERE (realmId = {} OR realmId = -1) ORDER BY secId ASC", sRealmList->GetCurrentRealmId().Realm);
     if (!result)
     {
         TC_LOG_INFO("server.loading", ">> Loaded 0 default permission definitions. DB table `rbac_default_permissions` is empty.");
@@ -529,7 +531,7 @@ void AccountMgr::LoadRBAC()
     }
     while (result->NextRow());
 
-    TC_LOG_INFO("server.loading", ">> Loaded %u permission definitions, %u linked permissions and %u default permissions in %u ms", count1, count2, count3, GetMSTimeDiffToNow(oldMSTime));
+    TC_LOG_INFO("server.loading", ">> Loaded {} permission definitions, {} linked permissions and {} default permissions in {} ms", count1, count2, count3, GetMSTimeDiffToNow(oldMSTime));
 }
 
 void AccountMgr::UpdateAccountAccess(rbac::RBACData* rbac, uint32 accountId, uint8 securityLevel, int32 realmId)
@@ -568,7 +570,7 @@ void AccountMgr::UpdateAccountAccess(rbac::RBACData* rbac, uint32 accountId, uin
 
 rbac::RBACPermission const* AccountMgr::GetRBACPermission(uint32 permissionId) const
 {
-    TC_LOG_TRACE("rbac", "AccountMgr::GetRBACPermission: %u", permissionId);
+    TC_LOG_TRACE("rbac", "AccountMgr::GetRBACPermission: {}", permissionId);
     rbac::RBACPermissionsContainer::const_iterator it = _permissions.find(permissionId);
     if (it != _permissions.end())
         return it->second;
@@ -588,7 +590,7 @@ bool AccountMgr::HasPermission(uint32 accountId, uint32 permissionId, uint32 rea
     rbac.LoadFromDB();
     bool hasPermission = rbac.HasPermission(permissionId);
 
-    TC_LOG_DEBUG("rbac", "AccountMgr::HasPermission [AccountId: %u, PermissionId: %u, realmId: %d]: %u",
+    TC_LOG_DEBUG("rbac", "AccountMgr::HasPermission [AccountId: {}, PermissionId: {}, realmId: {}]: {}",
                    accountId, permissionId, realmId, hasPermission);
     return hasPermission;
 }
@@ -604,6 +606,6 @@ void AccountMgr::ClearRBAC()
 
 rbac::RBACPermissionContainer const& AccountMgr::GetRBACDefaultPermissions(uint8 secLevel)
 {
-    TC_LOG_TRACE("rbac", "AccountMgr::GetRBACDefaultPermissions: secLevel %u - size: %u", secLevel, uint32(_defaultPermissions[secLevel].size()));
+    TC_LOG_TRACE("rbac", "AccountMgr::GetRBACDefaultPermissions: secLevel {} - size: {}", secLevel, uint32(_defaultPermissions[secLevel].size()));
     return _defaultPermissions[secLevel];
 }

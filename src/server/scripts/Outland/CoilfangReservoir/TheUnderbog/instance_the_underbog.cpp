@@ -24,22 +24,39 @@ gets instead the deserter debuff.
 
 #include "ScriptMgr.h"
 #include "InstanceScript.h"
+#include "Unit.h"
 #include "the_underbog.h"
 
 class instance_the_underbog : public InstanceMapScript
 {
 public:
-    instance_the_underbog() : InstanceMapScript(TheUndebogScriptName, 546) { }
+    instance_the_underbog() : InstanceMapScript(UBOGScriptName, 546) { }
+
+    struct instance_the_underbog_InstanceMapScript : public InstanceScript
+    {
+        instance_the_underbog_InstanceMapScript(InstanceMap* map) : InstanceScript(map)
+        {
+            SetHeaders(DataHeader);
+            SetBossNumber(EncounterCount);
+        }
+
+        void OnUnitDeath(Unit* unit) override
+        {
+            switch (unit->GetEntry())
+            {
+                case NPC_GHAZAN:
+                    SetBossState(DATA_GHAZAN, DONE);
+                    break;
+                default:
+                    break;
+            }
+        }
+    };
 
     InstanceScript* GetInstanceScript(InstanceMap* map) const override
     {
         return new instance_the_underbog_InstanceMapScript(map);
     }
-
-    struct instance_the_underbog_InstanceMapScript : public InstanceScript
-    {
-        instance_the_underbog_InstanceMapScript(InstanceMap* map) : InstanceScript(map) { }
-    };
 };
 
 void AddSC_instance_the_underbog()

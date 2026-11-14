@@ -20,7 +20,7 @@
 
 #include "CompilerDefs.h"
 
-#if TRINITY_COMPILER == TRINITY_COMPILER_GNU
+#if TRINITY_COMPILER_IS_GCC
 #  if !defined(__STDC_FORMAT_MACROS)
 #    define __STDC_FORMAT_MACROS
 #  endif
@@ -59,17 +59,8 @@
 
 #if TRINITY_PLATFORM == TRINITY_PLATFORM_WINDOWS
 #  define TRINITY_PATH_MAX 260
-#  define _USE_MATH_DEFINES
-#  ifndef DECLSPEC_NORETURN
-#    define DECLSPEC_NORETURN __declspec(noreturn)
-#  endif //DECLSPEC_NORETURN
-#  ifndef DECLSPEC_DEPRECATED
-#    define DECLSPEC_DEPRECATED __declspec(deprecated)
-#  endif //DECLSPEC_DEPRECATED
 #else // TRINITY_PLATFORM != TRINITY_PLATFORM_WINDOWS
 #  define TRINITY_PATH_MAX PATH_MAX
-#  define DECLSPEC_NORETURN
-#  define DECLSPEC_DEPRECATED
 #endif // TRINITY_PLATFORM
 
 #if !defined(COREDEBUG)
@@ -81,21 +72,17 @@
 #  define TRINITY_INLINE
 #endif //!COREDEBUG
 
-#if TRINITY_COMPILER == TRINITY_COMPILER_GNU
-#  define ATTR_NORETURN __attribute__((__noreturn__))
+#if TRINITY_COMPILER_IS_GCC
 #  define ATTR_PRINTF(F, V) __attribute__ ((__format__ (__printf__, F, V)))
-#  define ATTR_DEPRECATED __attribute__((__deprecated__))
-#else //TRINITY_COMPILER != TRINITY_COMPILER_GNU
-#  define ATTR_NORETURN
+#else //TRINITY_COMPILER_IS_GCC
 #  define ATTR_PRINTF(F, V)
-#  define ATTR_DEPRECATED
-#endif //TRINITY_COMPILER == TRINITY_COMPILER_GNU
+#endif //TRINITY_COMPILER_IS_GCC
 
 #ifdef TRINITY_API_USE_DYNAMIC_LINKING
-#  if TRINITY_COMPILER == TRINITY_COMPILER_MICROSOFT
+#  if TRINITY_COMPILER_IS_MICROSOFT
 #    define TC_API_EXPORT __declspec(dllexport)
 #    define TC_API_IMPORT __declspec(dllimport)
-#  elif TRINITY_COMPILER == TRINITY_COMPILER_GNU
+#  elif TRINITY_COMPILER_IS_GCC
 #    define TC_API_EXPORT __attribute__((visibility("default")))
 #    define TC_API_IMPORT
 #  else
@@ -124,6 +111,12 @@
 #  define TC_DATABASE_API TC_API_IMPORT
 #endif
 
+#ifdef TRINITY_API_EXPORT_NETWORK
+#  define TC_NETWORK_API TC_API_EXPORT
+#else
+#  define TC_NETWORK_API TC_API_IMPORT
+#endif
+
 #ifdef TRINITY_API_EXPORT_SHARED
 #  define TC_SHARED_API TC_API_EXPORT
 #else
@@ -136,6 +129,12 @@
 #  define TC_GAME_API TC_API_IMPORT
 #endif
 
+#ifdef TRINITY_API_EXPORT_MMAPS_COMMON
+#  define TC_MMAPS_COMMON_API TC_API_EXPORT
+#else
+#  define TC_MMAPS_COMMON_API TC_API_IMPORT
+#endif
+
 #define UI64FMTD "%" PRIu64
 #define UI64LIT(N) UINT64_C(N)
 
@@ -143,6 +142,9 @@
 #define SI64LIT(N) INT64_C(N)
 
 #define SZFMTD "%" PRIuPTR
+
+#define STRING_VIEW_FMT "%.*s"
+#define STRING_VIEW_FMT_ARG(str) static_cast<int>((str).length()), (str).data()
 
 typedef int64_t int64;
 typedef int32_t int32;

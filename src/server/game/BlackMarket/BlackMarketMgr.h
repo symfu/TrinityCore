@@ -94,13 +94,13 @@ public:
     time_t GetExpirationTime() const;
     bool IsCompleted() const;
 
-    void DeleteFromDB(CharacterDatabaseTransaction& trans) const;
-    void SaveToDB(CharacterDatabaseTransaction& trans) const;
+    void DeleteFromDB(CharacterDatabaseTransaction trans) const;
+    void SaveToDB(CharacterDatabaseTransaction trans) const;
     bool LoadFromDB(Field* fields);
 
     uint64 GetMinIncrement() const { return (_currentBid / 20) - ((_currentBid / 20) % GOLD); } //5% increase every bid (has to be round gold value)
     bool ValidateBid(uint64 bid) const;
-    void PlaceBid(uint64 bid, Player* player, CharacterDatabaseTransaction& trans);
+    void PlaceBid(uint64 bid, Player* player, CharacterDatabaseTransaction trans);
 
     std::string BuildAuctionMailSubject(BMAHMailAuctionAnswers response) const;
     std::string BuildAuctionMailBody();
@@ -124,6 +124,11 @@ class TC_GAME_API BlackMarketMgr
     ~BlackMarketMgr();
 
   public:
+    BlackMarketMgr(BlackMarketMgr const&) = delete;
+    BlackMarketMgr(BlackMarketMgr&&) = delete;
+    BlackMarketMgr& operator=(BlackMarketMgr const&) = delete;
+    BlackMarketMgr& operator=(BlackMarketMgr&&) = delete;
+
     static BlackMarketMgr* Instance();
 
     typedef std::unordered_map<int32, BlackMarketEntry*> BlackMarketEntryMap;
@@ -147,8 +152,8 @@ class TC_GAME_API BlackMarketMgr
     void AddAuction(BlackMarketEntry* auction);
     void AddTemplate(BlackMarketTemplate* templ);
 
-    void SendAuctionWonMail(BlackMarketEntry* entry, CharacterDatabaseTransaction& trans);
-    void SendAuctionOutbidMail(BlackMarketEntry* entry, CharacterDatabaseTransaction& trans); // Call before incrementing bid
+    void SendAuctionWonMail(BlackMarketEntry* entry, CharacterDatabaseTransaction trans);
+    void SendAuctionOutbidMail(BlackMarketEntry* entry, CharacterDatabaseTransaction trans); // Call before incrementing bid
 
   private:
       BlackMarketEntryMap _auctions;

@@ -15,17 +15,35 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef the_underbog_h__
-#define the_underbog_h__
+#ifndef TRINITYCORE_THE_UNDERBOG_H
+#define TRINITYCORE_THE_UNDERBOG_H
 
 #include "CreatureAIImpl.h"
 
-#define TheUndebogScriptName "instance_the_underbog"
+#define DataHeader "UBOG"
+#define UBOGScriptName "instance_the_underbog"
+
+constexpr uint32 EncounterCount = 4;
+
+enum UBOGDataTypes
+{
+    DATA_HUNGARFEN          = 0,
+    DATA_GHAZAN             = 1,
+    DATA_SWAMPLORD_MUSELEK  = 2,
+    DATA_THE_BLACK_STALKER  = 3
+};
+
+enum UBOGCreatureIds
+{
+    NPC_GHAZAN              = 18105
+};
 
 template <class AI, class T>
 inline AI* GetTheUnderbogAI(T* obj)
 {
-    return GetInstanceAI<AI>(obj, TheUndebogScriptName);
+    return GetInstanceAI<AI>(obj, UBOGScriptName);
 }
 
-#endif // the_underbog_h__
+#define RegisterTheUnderbogCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetTheUnderbogAI)
+
+#endif // TRINITYCORE_THE_UNDERBOG_H

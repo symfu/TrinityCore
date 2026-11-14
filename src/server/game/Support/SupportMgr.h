@@ -25,21 +25,64 @@ class ChatHandler;
 class Field;
 class Player;
 
+enum class ReportType : int32
+{
+    Chat                    = 0,
+    InWorld                 = 1,
+    ClubFinderPosting       = 2,
+    ClubFinderApplicant     = 3,
+    GroupFinderPosting      = 4,
+    GroupFinderApplicant    = 5,
+    ClubMember              = 6,
+    GroupMember             = 7,
+    Friend                  = 8,
+    Pet                     = 9,
+    BattlePet               = 10,
+    Calendar                = 11,
+    Mail                    = 12,
+    PvP                     = 13,
+    PvPScoreboard           = 14,
+    PvPGroupMember          = 15,
+    CraftingOrder           = 16,
+    RecentAlly              = 17
+};
+
+enum class ReportMajorCategory : int32
+{
+    InappropriateCommunication  = 0,
+    GameplaySabotage            = 1,
+    Cheating                    = 2,
+    InappropriateName           = 3,
+};
+
+enum class ReportMinorCategory : int32
+{
+    TextChat                            = 0x00000001,
+    Boosting                            = 0x00000002,
+    Spam                                = 0x00000004,
+    Afk                                 = 0x00000008,
+    IntentionallyFeeding                = 0x00000010,
+    BlockingProgress                    = 0x00000020,
+    Hacking                             = 0x00000040,
+    Botting                             = 0x00000080,
+    Advertisement                       = 0x00000100,
+    BTag                                = 0x00000200,
+    GroupName                           = 0x00000400,
+    CharacterName                       = 0x00000800,
+    GuildName                           = 0x00001000,
+    Description                         = 0x00002000,
+    Name                                = 0x00004000,
+    ChinaHarmfulMinors                  = 0x00008000,
+    Disruption                          = 0x00010000,
+    TerroristAndViolentExtremistContent = 0x00020000,
+    ChildSexualExploitationAndAbuse     = 0x00040000,
+};
+
 // from blizzard lua
 enum GMTicketSystemStatus
 {
     GMTICKET_QUEUE_STATUS_DISABLED  = 0,
     GMTICKET_QUEUE_STATUS_ENABLED   = 1
-};
-
-enum GMSupportComplaintType
-{
-    GMTICKET_SUPPORT_COMPLAINT_TYPE_NONE        = 0,
-    GMTICKET_SUPPORT_COMPLAINT_TYPE_LANGUAGE    = 2,
-    GMTICKET_SUPPORT_COMPLAINT_TYPE_PLAYERNAME  = 4,
-    GMTICKET_SUPPORT_COMPLAINT_TYPE_CHEAT       = 15,
-    GMTICKET_SUPPORT_COMPLAINT_TYPE_GUILDNAME   = 23,
-    GMTICKET_SUPPORT_COMPLAINT_TYPE_SPAMMING    = 24
 };
 
 enum SupportSpamType
@@ -56,6 +99,10 @@ class TC_GAME_API Ticket
 public:
     Ticket();
     Ticket(Player* player);
+    Ticket(Ticket const&) = delete;
+    Ticket(Ticket&&) = delete;
+    Ticket& operator=(Ticket const&) = delete;
+    Ticket& operator=(Ticket&&) = delete;
     virtual ~Ticket();
 
     bool IsClosed() const { return !_closedBy.IsEmpty(); }
@@ -134,14 +181,18 @@ public:
     ~ComplaintTicket();
 
     ObjectGuid GetTargetCharacterGuid() const { return _targetCharacterGuid; }
-    GMSupportComplaintType GetComplaintType() const { return _complaintType; }
+    ReportType GetReportType() const { return _reportType; }
+    ReportMajorCategory GetMajorCategory() const { return _majorCategory; }
+    ReportMinorCategory GetMinorCategoryFlags() const { return _minorCategoryFlags; }
     std::string const& GetNote() const { return _note; }
 
     void SetTargetCharacterGuid(ObjectGuid targetCharacterGuid)
     {
         _targetCharacterGuid = targetCharacterGuid;
     }
-    void SetComplaintType(GMSupportComplaintType type) { _complaintType = type; }
+    void SetReportType(ReportType reportType) { _reportType = reportType; }
+    void SetMajorCategory(ReportMajorCategory majorCategory) { _majorCategory = majorCategory; }
+    void SetMinorCategoryFlags(ReportMinorCategory minorCategoryFlags) { _minorCategoryFlags = minorCategoryFlags; }
     void SetChatLog(ChatLog const& log) { _chatLog = log; }
     void SetNote(std::string const& note) { _note = note; }
 
@@ -155,7 +206,9 @@ public:
 
 private:
     ObjectGuid _targetCharacterGuid;
-    GMSupportComplaintType _complaintType;
+    ReportType _reportType;
+    ReportMajorCategory _majorCategory;
+    ReportMinorCategory _minorCategoryFlags;
     ChatLog _chatLog;
     std::string _note;
 };
@@ -192,6 +245,11 @@ private:
     ~SupportMgr();
 
 public:
+    SupportMgr(SupportMgr const&) = delete;
+    SupportMgr(SupportMgr&&) = delete;
+    SupportMgr& operator=(SupportMgr const&) = delete;
+    SupportMgr& operator=(SupportMgr&&) = delete;
+
     static SupportMgr* instance();
 
     template<typename T>

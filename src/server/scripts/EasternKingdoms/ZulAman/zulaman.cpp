@@ -23,8 +23,6 @@
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "ScriptedCreature.h"
-#include "ScriptedGossip.h"
-#include "SpellScript.h"
 #include "zulaman.h"
 
 enum Says
@@ -71,7 +69,9 @@ enum Points
 
 enum Misc
 {
-    ITEM_VIRTUAL_ITEM           = 5301
+    ITEM_VIRTUAL_ITEM           = 5301,
+
+    GOSSIP_MENU_START_INTRO     = 12797,
 };
 
 Position const VoljinIntroWaypoint[4] =
@@ -93,7 +93,7 @@ class npc_voljin_zulaman : public CreatureScript
             {
                 me->SetDisplayFromModel(0);
                 if (_instance->GetData(DATA_ZULAMAN_STATE) == NOT_STARTED)
-                    me->AddNpcFlag(UNIT_NPC_FLAG_GOSSIP);
+                    me->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP);
             }
 
             void Reset() override
@@ -101,17 +101,17 @@ class npc_voljin_zulaman : public CreatureScript
                 _gongCount = 0;
             }
 
-            bool GossipSelect(Player* player, uint32 menuId, uint32 gossipListId) override
+            bool OnGossipSelect(Player* player, uint32 menuId, uint32 gossipListId) override
             {
                 if (_instance->GetData(DATA_ZULAMAN_STATE) != NOT_STARTED)
                     return true;
 
-                if (me->GetCreatureTemplate()->GossipMenuId == menuId && !gossipListId)
+                if (menuId == GOSSIP_MENU_START_INTRO && !gossipListId)
                 {
                     _events.Reset();
                     me->SetMountDisplayId(0);
                     me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);
-                    me->SetDynamicFlags(UNIT_DYNFLAG_NONE);
+                    me->ReplaceAllDynamicFlags(UNIT_DYNFLAG_NONE);
                     _events.ScheduleEvent(EVENT_INTRO_MOVEPOINT_1, 1s);
                     Talk(SAY_INTRO_1, player);
                     me->SetWalk(true);
@@ -149,7 +149,7 @@ class npc_voljin_zulaman : public CreatureScript
                             break;
                         case EVENT_BANGING_THE_GONG:
                             DoCast(me, SPELL_BANGING_THE_GONG);
-                            if (GameObject* strangeGong = ObjectAccessor::GetGameObject(*me, _instance->GetGuidData(DATA_STRANGE_GONG)))
+                            if (GameObject* strangeGong = _instance->GetGameObject(GO_STRANGE_GONG))
                                 strangeGong->RemoveFlag(GO_FLAG_NOT_SELECTABLE);
                             me->SetVirtualItem(0, uint32(ITEM_VIRTUAL_ITEM));
                             break;
@@ -159,8 +159,8 @@ class npc_voljin_zulaman : public CreatureScript
                             break;
                         case EVENT_START_DOOR_OPENING_2:
                             me->SetVirtualItem(0, uint32(0));
-                            if (GameObject* strangeGong = ObjectAccessor::GetGameObject(*me, _instance->GetGuidData(DATA_STRANGE_GONG)))
-                                strangeGong->AddFlag(GO_FLAG_NOT_SELECTABLE);
+                            if (GameObject* strangeGong = _instance->GetGameObject(GO_STRANGE_GONG))
+                                strangeGong->SetFlag(GO_FLAG_NOT_SELECTABLE);
                             _events.ScheduleEvent(EVENT_START_DOOR_OPENING_3, 500ms);
                             break;
                         case EVENT_START_DOOR_OPENING_3:
@@ -168,7 +168,7 @@ class npc_voljin_zulaman : public CreatureScript
                             break;
                         case EVENT_START_DOOR_OPENING_4:
                             _instance->SetData(DATA_ZULAMAN_STATE, IN_PROGRESS);
-                            if (GameObject* masiveGate = ObjectAccessor::GetGameObject(*me, _instance->GetGuidData(DATA_MASSIVE_GATE)))
+                            if (GameObject* masiveGate = _instance->GetGameObject(GO_MASSIVE_GATE))
                                 masiveGate->SetGoState(GO_STATE_ACTIVE);
                             _events.ScheduleEvent(EVENT_START_DOOR_OPENING_5, 3s);
                             break;
@@ -197,7 +197,7 @@ class npc_voljin_zulaman : public CreatureScript
                 switch (pointId)
                 {
                     case POINT_STRANGE_GONG:
-                        if (GameObject* strangeGong = ObjectAccessor::GetGameObject(*me, _instance->GetGuidData(DATA_STRANGE_GONG)))
+                        if (GameObject* strangeGong = _instance->GetGameObject(GO_STRANGE_GONG))
                             me->SetFacingToObject(strangeGong); // setInFront
                         break;
                     case POINT_START_DOOR_OPENING_1:
@@ -222,7 +222,6 @@ class npc_voljin_zulaman : public CreatureScript
             return GetZulAmanAI<npc_voljin_zulamanAI>(creature);
         }
 };
-
 
 void AddSC_zulaman()
 {

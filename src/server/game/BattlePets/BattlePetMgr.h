@@ -39,7 +39,6 @@ enum BattlePetMisc
 };
 
 static constexpr uint16 MAX_BATTLE_PET_LEVEL = 25;
-static constexpr Milliseconds REVIVE_BATTLE_PETS_COOLDOWN = 180s;
 
 enum class BattlePetBreedQuality : uint8
 {
@@ -144,26 +143,31 @@ struct BattlePet
     BattlePetSaveInfo SaveInfo = BATTLE_PET_UNCHANGED;
 };
 
-class BattlePetMgr
+class TC_GAME_API BattlePetMgr
 {
 public:
     explicit BattlePetMgr(WorldSession* owner);
+    BattlePetMgr(BattlePetMgr const& right) = delete;
+    BattlePetMgr(BattlePetMgr&& right) = delete;
 
     static void Initialize();
 
+    static void AddBattlePetSpeciesBySpell(uint32 spellId, BattlePetSpeciesEntry const* speciesEntry);
+    static BattlePetSpeciesEntry const* GetBattlePetSpeciesByCreature(uint32 creatureId);
+    static BattlePetSpeciesEntry const* GetBattlePetSpeciesBySpell(uint32 spellId);
     static uint16 RollPetBreed(uint32 species);
     static BattlePetBreedQuality GetDefaultPetQuality(uint32 species);
     static uint32 SelectPetDisplay(BattlePetSpeciesEntry const* speciesEntry);
 
     void LoadFromDB(PreparedQueryResult pets, PreparedQueryResult slots);
-    void SaveToDB(LoginDatabaseTransaction& trans);
+    void SaveToDB(LoginDatabaseTransaction trans);
 
     BattlePet* GetPet(ObjectGuid guid);
     void AddPet(uint32 species, uint32 display, uint16 breed, BattlePetBreedQuality quality, uint16 level = 1);
     void RemovePet(ObjectGuid guid);
     void ClearFanfare(ObjectGuid guid);
     void ModifyName(ObjectGuid guid, std::string const& name, std::unique_ptr<DeclinedName> declinedName);
-    bool IsPetInSlot(ObjectGuid guid);
+    bool IsPetInSlot(ObjectGuid guid) const;
 
     uint8 GetPetCount(BattlePetSpeciesEntry const* battlePetSpecies, ObjectGuid ownerGuid) const;
     bool HasMaxPetCount(BattlePetSpeciesEntry const* battlePetSpecies, ObjectGuid ownerGuid) const;
@@ -183,12 +187,13 @@ public:
     void GrantBattlePetExperience(ObjectGuid guid, uint16 xp, BattlePetXpSource xpSource);
     void GrantBattlePetLevel(ObjectGuid guid, uint16 grantedLevels);
     void HealBattlePetsPct(uint8 pct);
+    void UpdateBattlePetData(ObjectGuid guid);
 
     void SummonPet(ObjectGuid guid);
     void DismissPet();
 
     void SendJournal();
-    void SendUpdates(std::vector<std::reference_wrapper<BattlePet>> pets, bool petAdded);
+    void SendUpdates(std::span<std::reference_wrapper<BattlePet const> const> pets, bool petAdded);
     void SendError(BattlePetError error, uint32 creatureId);
 
     void SendJournalLockStatus();

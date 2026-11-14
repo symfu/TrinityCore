@@ -15,31 +15,20 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef DeadlineTimer_h__
-#define DeadlineTimer_h__
+#ifndef TRINITYCORE_DEADLINE_TIMER_H
+#define TRINITYCORE_DEADLINE_TIMER_H
 
-#include <boost/asio/deadline_timer.hpp>
+#include "Duration.h"
+#include "IoContext.h"
+#include <boost/asio/basic_waitable_timer.hpp>
 
-#if BOOST_VERSION >= 107000
-#define BasicDeadlineTimerThirdTemplateArg , boost::asio::io_context::executor_type
-#elif BOOST_VERSION >= 106600
-#define BasicDeadlineTimerThirdTemplateArg
-#else
-#define BasicDeadlineTimerThirdTemplateArg , boost::asio::deadline_timer_service<boost::posix_time::ptime, boost::asio::time_traits<boost::posix_time::ptime>>
-#endif
-
-#define DeadlineTimerBase boost::asio::basic_deadline_timer<boost::posix_time::ptime, boost::asio::time_traits<boost::posix_time::ptime> BasicDeadlineTimerThirdTemplateArg>
-
-namespace Trinity
+namespace Trinity::Asio
 {
-    namespace Asio
-    {
-        class DeadlineTimer : public DeadlineTimerBase
-        {
-        public:
-            using DeadlineTimerBase::basic_deadline_timer;
-        };
-    }
+class DeadlineTimer : public boost::asio::basic_waitable_timer<std::chrono::steady_clock, boost::asio::wait_traits<std::chrono::steady_clock>, IoContextExecutor>
+{
+public:
+    using basic_waitable_timer::basic_waitable_timer;
+};
 }
 
-#endif // DeadlineTimer_h__
+#endif // TRINITYCORE_DEADLINE_TIMER_H

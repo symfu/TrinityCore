@@ -32,7 +32,7 @@ EndContentData */
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "ScriptedCreature.h"
-#include "ScriptedGossip.h"
+#include "SpellScript.h"
 
 /*######
 ## npc_lady_sylvanas_windrunner
@@ -153,14 +153,15 @@ public:
         {
             if (summoned->GetEntry() == NPC_HIGHBORNE_BUNNY)
             {
+                summoned->SetDisableGravity(true);
+
                 if (Creature* target = ObjectAccessor::GetCreature(*summoned, targetGUID))
                 {
-                    target->GetMotionMaster()->MoveJump(target->GetPositionX(), target->GetPositionY(), me->GetPositionZ() + 15.0f, me->GetOrientation(), 0);
+                    target->GetMotionMaster()->MovePoint(0, target->GetPositionX(), target->GetPositionY(), me->GetPositionZ() + 15.0f, false);
                     target->UpdatePosition(target->GetPositionX(), target->GetPositionY(), me->GetPositionZ()+15.0f, 0.0f);
                     summoned->CastSpell(target, SPELL_RIBBON_OF_SOULS, false);
                 }
 
-                summoned->SetDisableGravity(true);
                 targetGUID = summoned->GetGUID();
             }
         }
@@ -232,11 +233,9 @@ public:
                         break;
                 }
             }
-
-            DoMeleeAttackIfReady();
         }
 
-        void QuestReward(Player* player, Quest const* quest, LootItemType /*type*/, uint32 /*opt*/) override
+        void OnQuestReward(Player* player, Quest const* quest, LootItemType /*type*/, uint32 /*opt*/) override
         {
             if (quest->GetQuestId() == QUEST_JOURNEY_TO_UNDERCITY)
                 SetGUID(player->GetGUID(), GUID_EVENT_INVOKER);
@@ -321,6 +320,35 @@ public:
 };
 
 /*######
+## Quest 1846: Dragonmaw Shinbones
+######*/
+
+enum DragonmawShinbones
+{
+    SPELL_BENDING_SHINBONE1 = 8854,
+    SPELL_BENDING_SHINBONE2 = 8855
+};
+
+// 8856 - Bending Shinbone
+class spell_undercity_bending_shinbone : public SpellScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_BENDING_SHINBONE1, SPELL_BENDING_SHINBONE2 });
+    }
+
+    void HandleScript(SpellEffIndex /*effIndex*/)
+    {
+        GetCaster()->CastSpell(GetCaster(), roll_chance(20) ? SPELL_BENDING_SHINBONE1 : SPELL_BENDING_SHINBONE2, GetSpell());
+    }
+
+    void Register() override
+    {
+        OnEffectHit += SpellEffectFn(spell_undercity_bending_shinbone::HandleScript, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+/*######
 ## AddSC
 ######*/
 
@@ -328,4 +356,5 @@ void AddSC_undercity()
 {
     new npc_lady_sylvanas_windrunner();
     new npc_highborne_lamenter();
+    RegisterSpellScript(spell_undercity_bending_shinbone);
 }

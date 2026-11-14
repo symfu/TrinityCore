@@ -127,7 +127,7 @@ struct boss_randolph_moloch : public BossAI
         }
     }
 
-    void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+    void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*damageType*/, SpellInfo const* /*spellInfo = nullptr*/) override
     {
         if (me->HealthBelowPctDamaged(71, damage) && me->HealthAbovePct(59) && !_firstVanish)
         {
@@ -164,12 +164,12 @@ struct npc_mortimer_moloch : public ScriptedAI
 
         if (id == POINT_FINISH)
         {
-            scheduler.Schedule(4s, [this](TaskContext /*context*/)
+            scheduler.Schedule(4s, [this](TaskContext const& /*context*/)
             {
                 Talk(MORTIMER_MOLOCH_EMOTE);
             });
 
-            scheduler.Schedule(7s, [this](TaskContext /*context*/)
+            scheduler.Schedule(7s, [this](TaskContext const& /*context*/)
             {
                 Talk(MORTIMER_MOLOCH_DEATH);
                 me->KillSelf();

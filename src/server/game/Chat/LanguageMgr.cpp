@@ -16,13 +16,12 @@
  */
 
 #include "LanguageMgr.h"
-#include "Containers.h"
 #include "DB2Stores.h"
 #include "Log.h"
-#include "SpellInfo.h"
+#include "MapUtils.h"
 #include "SpellMgr.h"
 #include "Timer.h"
-#include <sstream>
+#include "Util.h"
 
 LanguageMgr::LanguageMgr() : _langsMap(), _wordsMap() { }
 
@@ -79,7 +78,7 @@ void LanguageMgr::LoadLanguages()
     _langsMap.emplace(LANG_ADDON_LOGGED, LanguageDesc());
 
     // Log load time
-    TC_LOG_INFO("server.loading", ">> Loaded %u languages in %u ms", uint32(_langsMap.size()), GetMSTimeDiffToNow(oldMSTime));
+    TC_LOG_INFO("server.loading", ">> Loaded {} languages in {} ms", uint32(_langsMap.size()), GetMSTimeDiffToNow(oldMSTime));
 }
 
 void LanguageMgr::LoadLanguagesWords()
@@ -98,7 +97,7 @@ void LanguageMgr::LoadLanguagesWords()
     }
 
     // log load time
-    TC_LOG_INFO("server.loading", ">> Loaded %u word groups from %u words in %u ms", uint32(_wordsMap.size()), wordsNum, GetMSTimeDiffToNow(oldMSTime));
+    TC_LOG_INFO("server.loading", ">> Loaded {} word groups from {} words in {} ms", uint32(_wordsMap.size()), wordsNum, GetMSTimeDiffToNow(oldMSTime));
 }
 
 LanguageMgr::WordList const* LanguageMgr::FindWordGroup(uint32 language, uint32 wordLen) const
@@ -132,7 +131,13 @@ namespace
                 case 'c':
                 case 'C':
                     // skip color
-                    i += 9;
+                    if (i + 2 >= source.length())
+                        break;
+
+                    if (source[i + 2] == 'n')
+                        i = source.find(':', i); // numeric color id
+                    else
+                        i += 9;
                     break;
                 case 'r':
                     ++i;
@@ -169,18 +174,23 @@ namespace
             return;
 
         for (wchar_t& w : wstrText)
-            if (!isExtendedLatinCharacter(w) && !isNumeric(w) && w <= 0xFF && w != L'\\')
+            if (!isLatin1Character(w) && !isNumeric(w) && w <= 0xFF && w != L'\'')
                 w = L' ';
 
         WStrToUtf8(wstrText, text);
     }
 
-    static char upper_backslash(char c)
+    constexpr char upper_backslash(char c)
     {
-        return c == '/' ? '\\' : char(toupper(c));
+        if (c == '/')
+            return '\\';
+        if (c >= 'a' && c <= 'z')
+            return char('A' + char(c - 'a'));
+        else
+            return c;
     }
 
-    static uint32 const sstr_hashtable[16] =
+    constexpr std::array<uint32, 16> sstr_hashtable =
     {
         0x486E26EE, 0xDCAA16B3, 0xE1918EEF, 0x202DAFDB,
         0x341C7DC7, 0x1C365303, 0x40EF2D37, 0x65FD5E49,
@@ -188,15 +198,11 @@ namespace
         0xE3061AE7, 0xA39B0FA1, 0x9797F25F, 0xE4444563,
     };
 
-    uint32 SStrHash(char const* string, bool caseInsensitive, uint32 seed = 0x7FED7FED)
+    constexpr uint32 SStrHash(std::string_view string, bool caseInsensitive, uint32 seed = 0x7FED7FED)
     {
-        ASSERT(string);
-
         uint32 shift = 0xEEEEEEEE;
-        while (*string)
+        for (char c : string)
         {
-            char c = *string++;
-
             if (caseInsensitive)
                 c = upper_backslash(c);
 
@@ -216,14 +222,13 @@ std::string LanguageMgr::Translate(std::string const& msg, uint32 language, Loca
 
     std::string result;
     result.reserve(textToTranslate.length());
-    Tokenizer tokens(textToTranslate, ' ');
-    for (char const* str : tokens)
+    for (std::string_view str : Trinity::Tokenize(textToTranslate, ' ', false))
     {
-        uint32 wordLen = std::min(18u, uint32(strlen(str)));
+        uint32 wordLen = std::min(18u, uint32(str.length()));
         if (LanguageMgr::WordList const* wordGroup = FindWordGroup(language, wordLen))
         {
             uint32 wordHash = SStrHash(str, true);
-            uint8 idxInsideGroup = wordHash % wordGroup->size();
+            uint8 idxInsideGroup = language * wordHash % wordGroup->size();
 
             char const* replacementWord = (*wordGroup)[idxInsideGroup];
 
@@ -233,11 +238,11 @@ std::string LanguageMgr::Translate(std::string const& msg, uint32 language, Loca
                 case LOCALE_zhCN:
                 case LOCALE_zhTW:
                 {
-                    size_t length = std::min(strlen(str), strlen(replacementWord));
+                    size_t length = std::min(str.length(), strlen(replacementWord));
                     for (size_t i = 0; i < length; ++i)
                     {
                         if (str[i] >= 'A' && str[i] <= 'Z')
-                            result += char(toupper(replacementWord[i]));
+                            result += charToUpper(replacementWord[i]);
                         else
                             result += replacementWord[i];
                     }
@@ -251,10 +256,10 @@ std::string LanguageMgr::Translate(std::string const& msg, uint32 language, Loca
                         size_t length = std::min(wstrSourceWord.length(), strlen(replacementWord));
                         for (size_t i = 0; i < length; ++i)
                         {
-                            if (isUpper(wstrSourceWord[i]))
-                                result += char(toupper(replacementWord[i]));
+                            if (wstrSourceWord[i] != L'\'' && isUpper(wstrSourceWord[i]))
+                                result += charToUpper(replacementWord[i]);
                             else
-                                result += char(tolower(replacementWord[i]));
+                                result += charToLower(replacementWord[i]);
                         }
                     }
                     break;

@@ -26,10 +26,10 @@
 #include "ScriptMgr.h"
 #include "CellImpl.h"
 #include "Chat.h"
+#include "ChatCommand.h"
 #include "DisableMgr.h"
 #include "GridNotifiersImpl.h"
-#include "Map.h"
-#include "MMapFactory.h"
+#include "MMapManager.h"
 #include "PathGenerator.h"
 #include "PhasingHandler.h"
 #include "Player.h"
@@ -37,14 +37,20 @@
 #include "RBAC.h"
 #include "WorldSession.h"
 
+#if TRINITY_COMPILER_IS_GCC
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
+using namespace Trinity::ChatCommands;
+
 class mmaps_commandscript : public CommandScript
 {
 public:
     mmaps_commandscript() : CommandScript("mmaps_commandscript") { }
 
-    std::vector<ChatCommand> GetCommands() const override
+    std::span<ChatCommandBuilder const> GetCommands() const override
     {
-        static std::vector<ChatCommand> mmapCommandTable =
+        static ChatCommandTable mmapCommandTable =
         {
             { "loadedtiles", rbac::RBAC_PERM_COMMAND_MMAP_LOADEDTILES, false, &HandleMmapLoadedTilesCommand, "" },
             { "loc",         rbac::RBAC_PERM_COMMAND_MMAP_LOC,         false, &HandleMmapLocCommand,         "" },
@@ -53,7 +59,7 @@ public:
             { "testarea",    rbac::RBAC_PERM_COMMAND_MMAP_TESTAREA,    false, &HandleMmapTestArea,           "" },
         };
 
-        static std::vector<ChatCommand> commandTable =
+        static ChatCommandTable commandTable =
         {
             { "mmap", rbac::RBAC_PERM_COMMAND_MMAP, true, nullptr, "", mmapCommandTable },
         };
@@ -62,7 +68,8 @@ public:
 
     static bool HandleMmapPathCommand(ChatHandler* handler, char const* args)
     {
-        if (!MMAP::MMapFactory::createOrGetMMapManager()->GetNavMesh(handler->GetSession()->GetPlayer()->GetMapId()))
+        Player* player = handler->GetSession()->GetPlayer();
+        if (!MMAP::MMapManager::instance()->GetNavMesh(player->GetMapId(), player->GetInstanceId()))
         {
             handler->PSendSysMessage("NavMesh not loaded for current map.");
             return true;
@@ -71,7 +78,6 @@ public:
         handler->PSendSysMessage("mmap path:");
 
         // units
-        Player* player = handler->GetSession()->GetPlayer();
         Unit* target = handler->getSelectedUnit();
         if (!player || !target)
         {
@@ -134,13 +140,14 @@ public:
         float x, y, z;
         player->GetPosition(x, y, z);
 
-        handler->PSendSysMessage("%04u%02i%02i.mmtile", player->GetMapId(), gx, gy);
-        handler->PSendSysMessage("gridloc [%i, %i]", gy, gx);
-
         // calculate navmesh tile location
-        uint32 terrainMapId = PhasingHandler::GetTerrainMapId(player->GetPhaseShift(), player->GetMap(), x, y);
-        dtNavMesh const* navmesh = MMAP::MMapFactory::createOrGetMMapManager()->GetNavMesh(terrainMapId);
-        dtNavMeshQuery const* navmeshquery = MMAP::MMapFactory::createOrGetMMapManager()->GetNavMeshQuery(terrainMapId, player->GetInstanceId());
+        uint32 terrainMapId = PhasingHandler::GetTerrainMapId(player->GetPhaseShift(), player->GetMapId(), player->GetMap()->GetTerrain(), x, y);
+
+        handler->PSendSysMessage("%04u_%02i_%02i.mmtile", terrainMapId, gx, gy);
+        handler->PSendSysMessage("tileloc [%i, %i]", gy, gx);
+
+        dtNavMesh const* navmesh = MMAP::MMapManager::instance()->GetNavMesh(terrainMapId, player->GetInstanceId());
+        dtNavMeshQuery const* navmeshquery = MMAP::MMapManager::instance()->GetNavMeshQuery(terrainMapId, player->GetMapId(), player->GetInstanceId());
         if (!navmesh || !navmeshquery)
         {
             handler->PSendSysMessage("NavMesh not loaded for current map.");
@@ -189,9 +196,9 @@ public:
     static bool HandleMmapLoadedTilesCommand(ChatHandler* handler, char const* /*args*/)
     {
         Player* player = handler->GetSession()->GetPlayer();
-        uint32 terrainMapId = PhasingHandler::GetTerrainMapId(player->GetPhaseShift(), player->GetMap(), player->GetPositionX(), player->GetPositionY());
-        dtNavMesh const* navmesh = MMAP::MMapFactory::createOrGetMMapManager()->GetNavMesh(terrainMapId);
-        dtNavMeshQuery const* navmeshquery = MMAP::MMapFactory::createOrGetMMapManager()->GetNavMeshQuery(terrainMapId, player->GetInstanceId());
+        uint32 terrainMapId = PhasingHandler::GetTerrainMapId(player->GetPhaseShift(), player->GetMapId(), player->GetMap()->GetTerrain(), player->GetPositionX(), player->GetPositionY());
+        dtNavMesh const* navmesh = MMAP::MMapManager::instance()->GetNavMesh(terrainMapId, player->GetInstanceId());
+        dtNavMeshQuery const* navmeshquery = MMAP::MMapManager::instance()->GetNavMeshQuery(terrainMapId, player->GetMapId(), player->GetInstanceId());
         if (!navmesh || !navmeshquery)
         {
             handler->PSendSysMessage("NavMesh not loaded for current map.");
@@ -215,14 +222,14 @@ public:
     static bool HandleMmapStatsCommand(ChatHandler* handler, char const* /*args*/)
     {
         Player* player = handler->GetSession()->GetPlayer();
-        uint32 terrainMapId = PhasingHandler::GetTerrainMapId(player->GetPhaseShift(), player->GetMap(), player->GetPositionX(), player->GetPositionY());
+        uint32 terrainMapId = PhasingHandler::GetTerrainMapId(player->GetPhaseShift(), player->GetMapId(), player->GetMap()->GetTerrain(), player->GetPositionX(), player->GetPositionY());
         handler->PSendSysMessage("mmap stats:");
         handler->PSendSysMessage("  global mmap pathfinding is %sabled", DisableMgr::IsPathfindingEnabled(player->GetMapId()) ? "en" : "dis");
 
-        MMAP::MMapManager* manager = MMAP::MMapFactory::createOrGetMMapManager();
+        MMAP::MMapManager* manager = MMAP::MMapManager::instance();
         handler->PSendSysMessage(" %u maps loaded with %u tiles overall", manager->getLoadedMapsCount(), manager->getLoadedTilesCount());
 
-        dtNavMesh const* navmesh = manager->GetNavMesh(terrainMapId);
+        dtNavMesh const* navmesh = manager->GetNavMesh(terrainMapId, player->GetInstanceId());
         if (!navmesh)
         {
             handler->PSendSysMessage("NavMesh not loaded for current map.");

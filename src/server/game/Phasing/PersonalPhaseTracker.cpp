@@ -16,13 +16,12 @@
  */
 
 #include "PersonalPhaseTracker.h"
-#include "Containers.h"
 #include "Log.h"
 #include "Map.h"
+#include "MapUtils.h"
 #include "Object.h"
 #include "ObjectGridLoader.h"
 #include "ObjectMgr.h"
-#include "PhasingHandler.h"
 
  /*********************************************************/
  /***            PlayerPersonalPhasesTracker            ***/
@@ -117,12 +116,12 @@ void PlayerPersonalPhasesTracker::DespawnPhase(Map* map, PersonalPhaseSpawns& sp
 /***             MultiPersonalPhaseTracker             ***/
 /*********************************************************/
 
-void MultiPersonalPhaseTracker::LoadGrid(PhaseShift const& phaseShift, NGridType& grid, Map* map, Cell const& cell)
+void MultiPersonalPhaseTracker::LoadGrid(PhaseShift const& phaseShift, NGridType& grid, Map* map)
 {
     if (!phaseShift.HasPersonalPhase())
         return;
 
-    PersonalPhaseGridLoader loader(grid, map, cell, phaseShift.GetPersonalGuid());
+    PersonalPhaseGridLoader loader(grid, map, phaseShift.GetPersonalGuid());
     PlayerPersonalPhasesTracker& playerTracker = _playerData[phaseShift.GetPersonalGuid()];
 
     for (PhaseShift::PhaseRef const& phaseRef : phaseShift.GetPhases())
@@ -136,8 +135,8 @@ void MultiPersonalPhaseTracker::LoadGrid(PhaseShift const& phaseShift, NGridType
         if (playerTracker.IsGridLoadedForPhase(grid.GetGridId(), phaseRef.Id))
             continue;
 
-        TC_LOG_DEBUG("maps", "Loading personal phase objects (phase %u) in grid[%u, %u] for map %u instance %u",
-            phaseRef.Id, cell.GridX(), cell.GridY(), map->GetId(), map->GetInstanceId());
+        TC_LOG_DEBUG("maps", "Loading personal phase objects (phase {}) in grid[{}, {}] for map {} instance {}",
+            phaseRef.Id, grid.getX(), grid.getY(), map->GetId(), map->GetInstanceId());
 
         loader.Load(phaseRef.Id);
 
@@ -175,13 +174,13 @@ void MultiPersonalPhaseTracker::UnregisterTrackedObject(WorldObject* object)
         playerTracker->UnregisterTrackedObject(object);
 }
 
-void MultiPersonalPhaseTracker::OnOwnerPhaseChanged(WorldObject const* phaseOwner, NGridType* grid, Map* map, Cell const& cell)
+void MultiPersonalPhaseTracker::OnOwnerPhaseChanged(WorldObject const* phaseOwner, NGridType* grid, Map* map)
 {
     if (PlayerPersonalPhasesTracker* playerTracker = Trinity::Containers::MapGetValuePtr(_playerData, phaseOwner->GetGUID()))
         playerTracker->OnOwnerPhasesChanged(phaseOwner);
 
     if (grid)
-        LoadGrid(phaseOwner->GetPhaseShift(), *grid, map, cell);
+        LoadGrid(phaseOwner->GetPhaseShift(), *grid, map);
 }
 
 void MultiPersonalPhaseTracker::MarkAllPhasesForDeletion(ObjectGuid const& phaseOwner)

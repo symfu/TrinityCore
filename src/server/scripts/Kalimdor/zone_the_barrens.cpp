@@ -31,102 +31,8 @@ EndContentData */
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "ScriptedEscortAI.h"
-#include "ScriptedGossip.h"
 #include "SpellInfo.h"
 #include "TemporarySummon.h"
-
-/*######
-# npc_gilthares
-######*/
-
-enum Gilthares
-{
-    SAY_GIL_START               = 0,
-    SAY_GIL_AT_LAST             = 1,
-    SAY_GIL_PROCEED             = 2,
-    SAY_GIL_FREEBOOTERS         = 3,
-    SAY_GIL_AGGRO               = 4,
-    SAY_GIL_ALMOST              = 5,
-    SAY_GIL_SWEET               = 6,
-    SAY_GIL_FREED               = 7,
-
-    QUEST_FREE_FROM_HOLD        = 898,
-    AREA_MERCHANT_COAST         = 391
-};
-
-class npc_gilthares : public CreatureScript
-{
-public:
-    npc_gilthares() : CreatureScript("npc_gilthares") { }
-
-    struct npc_giltharesAI : public EscortAI
-    {
-        npc_giltharesAI(Creature* creature) : EscortAI(creature) { }
-
-        void Reset() override { }
-
-        void WaypointReached(uint32 waypointId, uint32 /*pathId*/) override
-        {
-            Player* player = GetPlayerForEscort();
-            if (!player)
-                return;
-
-            switch (waypointId)
-            {
-                case 16:
-                    Talk(SAY_GIL_AT_LAST, player);
-                    break;
-                case 17:
-                    Talk(SAY_GIL_PROCEED, player);
-                    break;
-                case 18:
-                    Talk(SAY_GIL_FREEBOOTERS, player);
-                    break;
-                case 37:
-                    Talk(SAY_GIL_ALMOST, player);
-                    break;
-                case 47:
-                    Talk(SAY_GIL_SWEET, player);
-                    break;
-                case 53:
-                    Talk(SAY_GIL_FREED, player);
-                    player->GroupEventHappens(QUEST_FREE_FROM_HOLD, me);
-                    break;
-            }
-        }
-
-        void JustEngagedWith(Unit* who) override
-        {
-            //not always use
-            if (rand32() % 4)
-                return;
-
-            //only aggro text if not player and only in this area
-            if (who->GetTypeId() != TYPEID_PLAYER && me->GetAreaId() == AREA_MERCHANT_COAST)
-            {
-                //appears to be pretty much random (possible only if escorter not in combat with who yet?)
-                Talk(SAY_GIL_AGGRO, who);
-            }
-        }
-
-        void QuestAccept(Player* player, Quest const* quest) override
-        {
-            if (quest->GetQuestId() == QUEST_FREE_FROM_HOLD)
-            {
-                me->SetFaction(FACTION_ESCORTEE_H_NEUTRAL_ACTIVE);
-                me->SetStandState(UNIT_STAND_STATE_STAND);
-
-                Talk(SAY_GIL_START, player);
-                Start(false, false, player->GetGUID(), quest);
-            }
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_giltharesAI(creature);
-    }
-};
 
 /*######
 ## npc_taskmaster_fizzule
@@ -213,8 +119,6 @@ public:
 
             if (!UpdateVictim())
                 return;
-
-            DoMeleeAttackIfReady();
         }
 
         void ReceiveEmote(Player* /*player*/, uint32 emote) override
@@ -377,8 +281,8 @@ public:
                             if (!creature)
                                 continue;
                             creature->SetFaction(35);
-                            creature->AddUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
-                            creature->AddUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+                            creature->SetUninteractible(true);
+                            creature->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
                             creature->HandleEmoteCommand(EMOTE_ONESHOT_ROAR);
                             AffrayChallenger[i] = creature->GetGUID();
                         }
@@ -414,7 +318,7 @@ public:
                             Creature* creature = ObjectAccessor::GetCreature(*me, AffrayChallenger[Wave]);
                             if (creature && (creature->IsAlive()))
                             {
-                                creature->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                                creature->SetUninteractible(false);
                                 creature->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
                                 creature->HandleEmoteCommand(EMOTE_ONESHOT_ROAR);
                                 creature->SetFaction(14);
@@ -446,7 +350,7 @@ public:
                             }
                             else // Makes BIG WILL attackable.
                             {
-                                creature->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+                                creature->SetUninteractible(false);
                                 creature->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
                                 creature->HandleEmoteCommand(EMOTE_ONESHOT_ROAR);
                                 creature->SetFaction(14);
@@ -461,158 +365,6 @@ public:
 
 };
 
-/*#####
-## npc_wizzlecrank_shredder
-#####*/
-
-enum Wizzlecrank
-{
-    SAY_MERCENARY       = 0,
-    SAY_START           = 0,
-    SAY_STARTUP1        = 1,
-    SAY_STARTUP2        = 2,
-    SAY_PROGRESS_1      = 3,
-    SAY_PROGRESS_2      = 4,
-    SAY_PROGRESS_3      = 5,
-    SAY_END             = 6,
-
-    QUEST_ESCAPE        = 863,
-    NPC_PILOT_WIZZ      = 3451,
-    NPC_MERCENARY       = 3282,
-};
-
-class npc_wizzlecrank_shredder : public CreatureScript
-{
-public:
-    npc_wizzlecrank_shredder() : CreatureScript("npc_wizzlecrank_shredder") { }
-
-    struct npc_wizzlecrank_shredderAI : public EscortAI
-    {
-        npc_wizzlecrank_shredderAI(Creature* creature) : EscortAI(creature)
-        {
-            IsPostEvent = false;
-            PostEventTimer = 1000;
-            PostEventCount = 0;
-            me->SetReactState(REACT_DEFENSIVE);
-        }
-
-        bool IsPostEvent;
-        uint32 PostEventTimer;
-        uint32 PostEventCount;
-
-        void WaypointReached(uint32 waypointId, uint32 /*pathId*/) override
-        {
-            switch (waypointId)
-            {
-                case 0:
-                    Talk(SAY_STARTUP1);
-                    break;
-                case 9:
-                    SetRun(false);
-                    break;
-                case 17:
-                    if (Creature* temp = me->SummonCreature(NPC_MERCENARY, 1128.489f, -3037.611f, 92.701f, 1.472f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 2min))
-                    {
-                        temp->AI()->Talk(SAY_MERCENARY);
-                        me->SummonCreature(NPC_MERCENARY, 1160.172f, -2980.168f, 97.313f, 3.690f, TEMPSUMMON_TIMED_DESPAWN_OUT_OF_COMBAT, 2min);
-                    }
-                    break;
-                case 24:
-                    IsPostEvent = true;
-                    break;
-            }
-        }
-
-        void WaypointStarted(uint32 PointId, uint32 /*pathId*/) override
-        {
-            Player* player = GetPlayerForEscort();
-
-            if (!player)
-                return;
-
-            switch (PointId)
-            {
-                case 9:
-                    Talk(SAY_STARTUP2, player);
-                    break;
-                case 18:
-                    Talk(SAY_PROGRESS_1, player);
-                    SetRun();
-                    break;
-            }
-        }
-
-        void JustSummoned(Creature* summoned) override
-        {
-            if (summoned->GetEntry() == NPC_PILOT_WIZZ)
-                me->SetStandState(UNIT_STAND_STATE_DEAD);
-
-            if (summoned->GetEntry() == NPC_MERCENARY)
-                summoned->AI()->AttackStart(me);
-        }
-
-        void UpdateEscortAI(uint32 Diff) override
-        {
-            if (UpdateVictim())
-            {
-                DoMeleeAttackIfReady();
-                return;
-            }
-
-            if (!IsPostEvent)
-                return;
-
-            if (PostEventTimer > Diff)
-            {
-                PostEventTimer -= Diff;
-                return;
-            }
-
-            switch (PostEventCount)
-            {
-                case 0:
-                    Talk(SAY_PROGRESS_2);
-                    break;
-                case 1:
-                    Talk(SAY_PROGRESS_3);
-                    break;
-                case 2:
-                    Talk(SAY_END);
-                    break;
-                case 3:
-                    if (Player* player = GetPlayerForEscort())
-                    {
-                        player->GroupEventHappens(QUEST_ESCAPE, me);
-                        me->DespawnOrUnsummon(5min);
-                        me->SummonCreature(NPC_PILOT_WIZZ, 0.0f, 0.0f, 0.0f, 0.0f, TEMPSUMMON_TIMED_DESPAWN, 3min);
-                    }
-                    break;
-            }
-
-            ++PostEventCount;
-            PostEventTimer = 5000;
-        }
-
-        void QuestAccept(Player* player, Quest const* quest) override
-        {
-            if (quest->GetQuestId() == QUEST_ESCAPE)
-            {
-                me->SetFaction(FACTION_RATCHET);
-                Talk(SAY_START);
-                SetDespawnAtEnd(false);
-                Start(true, false, player->GetGUID());
-            }
-        }
-    };
-
-    CreatureAI* GetAI(Creature* creature) const override
-    {
-        return new npc_wizzlecrank_shredderAI(creature);
-    }
-
-};
-
 void AddSC_the_barrens()
 {
-    new npc_wizzlecrank_shredder();
 }

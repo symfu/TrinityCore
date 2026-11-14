@@ -19,10 +19,13 @@
 #define TRINITYSERVER_MOVESPLINEINIT_ARGS_H
 
 #include "MoveSplineFlag.h"
+#include "MovementTypedefs.h"
 #include "ObjectGuid.h"
 #include "Optional.h"
 
 class Unit;
+
+enum class AnimTier : uint8;
 
 namespace Movement
 {
@@ -50,16 +53,23 @@ namespace Movement
         uint32 ParabolicCurveId = 0;
     };
 
+    struct TurnData
+    {
+        float StartFacing = 0.0f;
+        float TotalTurnRads = 0.0f;
+        float RadsPerSec = 0.0f;
+    };
+
     struct AnimTierTransition
     {
         uint32 TierTransitionId = 0;
-        uint8 AnimTier = 0;
+        ::AnimTier AnimTier = ::AnimTier(0);
     };
 
     struct MoveSplineInitArgs
     {
-        explicit MoveSplineInitArgs(size_t path_capacity = 16);
-        MoveSplineInitArgs(MoveSplineInitArgs&& args);
+        explicit MoveSplineInitArgs();
+        MoveSplineInitArgs(MoveSplineInitArgs&& args) noexcept;
         ~MoveSplineInitArgs();
 
         PointsArray path;
@@ -68,21 +78,22 @@ namespace Movement
         int32 path_Idx_offset;
         float velocity;
         float parabolic_amplitude;
-        float vertical_acceleration;
-        float time_perc;
+        int32 effect_start_point;
+        int32 fade_object_duration_ms;
         uint32 splineId;
         float initialOrientation;
         Optional<SpellEffectExtraData> spellEffectExtra;
+        Optional<TurnData> turnData;
         Optional<AnimTierTransition> animTier;
         bool walk;
         bool HasVelocity;
         bool TransformForTransport;
 
         /** Returns true to show that the arguments were configured correctly and MoveSpline initialization will succeed. */
-        bool Validate(Unit* unit) const;
+        bool Validate(Unit const* unit);
 
     private:
-        bool _checkPathLengths() const;
+        bool _checkPathLengths();
     };
 }
 

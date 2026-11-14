@@ -23,7 +23,7 @@
 #define MechanarScriptName "instance_mechanar"
 #define DataHeader "MR"
 
-uint32 const EncounterCount             = 5;
+uint32 constexpr EncounterCount         = 5;
 
 enum MRDataTypes
 {
@@ -46,5 +46,7 @@ inline AI* GetMechanarAI(T* obj)
 {
     return GetInstanceAI<AI>(obj, MechanarScriptName);
 }
+
+#define RegisterMechanarCreatureAI(ai_name) RegisterCreatureAIWithFactory(ai_name, GetMechanarAI)
 
 #endif

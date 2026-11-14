@@ -16,11 +16,12 @@
  */
 
 #include "ScriptMgr.h"
-#include "ObjectAccessor.h"
+#include "Containers.h"
 #include "ScriptedCreature.h"
+#include "SpellInfo.h"
 #include "the_eye.h"
 
-enum Yells
+enum ReaverTexts
 {
     SAY_AGGRO                   = 0,
     SAY_SLAY                    = 1,
@@ -28,15 +29,15 @@ enum Yells
     SAY_POUNDING                = 3
 };
 
-enum Spells
+enum ReaverSpells
 {
     SPELL_POUNDING              = 34162,
     SPELL_ARCANE_ORB            = 34172,
     SPELL_KNOCK_AWAY            = 25778,
-    SPELL_BERSERK               = 27680
+    SPELL_BERSERK               = 26662
 };
 
-enum Events
+enum ReaverEvents
 {
     EVENT_POUNDING              = 1,
     EVENT_ARCANE_ORB,
@@ -44,130 +45,100 @@ enum Events
     EVENT_BERSERK
 };
 
-class boss_void_reaver : public CreatureScript
+// 19516 - Void Reaver
+struct boss_void_reaver : public BossAI
 {
-    public:
-        boss_void_reaver() : CreatureScript("boss_void_reaver") { }
+    boss_void_reaver(Creature* creature) : BossAI(creature, DATA_VOID_REAVER) { }
 
-        struct boss_void_reaverAI : public BossAI
+    void JustEngagedWith(Unit* who) override
+    {
+        BossAI::JustEngagedWith(who);
+
+        Talk(SAY_AGGRO);
+
+        me->CallForHelp(120.0f);
+
+        events.ScheduleEvent(EVENT_POUNDING, 8s, 15s);
+        events.ScheduleEvent(EVENT_ARCANE_ORB, 3s);
+        events.ScheduleEvent(EVENT_KNOCK_AWAY, 12s, 16s);
+        events.ScheduleEvent(EVENT_BERSERK, 10min);
+    }
+
+    void OnSpellCast(SpellInfo const* spell) override
+    {
+        if (spell->Id == SPELL_POUNDING)
+            Talk(SAY_POUNDING);
+    }
+
+    void KilledUnit(Unit* /*victim*/) override
+    {
+        Talk(SAY_SLAY);
+    }
+
+    void JustDied(Unit* /*killer*/) override
+    {
+        Talk(SAY_DEATH);
+        _JustDied();
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        if (!UpdateVictim())
+            return;
+
+        events.Update(diff);
+
+        if (me->HasUnitState(UNIT_STATE_CASTING))
+            return;
+
+        while (uint32 eventId = events.ExecuteEvent())
         {
-            boss_void_reaverAI(Creature* creature) : BossAI(creature, DATA_VOID_REAVER)
+            switch (eventId)
             {
-                Initialize();
-            }
-
-            void Initialize()
-            {
-                Enraged = false;
-            }
-
-            void Reset() override
-            {
-                Initialize();
-                _Reset();
-            }
-
-            void KilledUnit(Unit* /*victim*/) override
-            {
-                Talk(SAY_SLAY);
-            }
-
-            void JustDied(Unit* /*killer*/) override
-            {
-                Talk(SAY_DEATH);
-                DoZoneInCombat();
-                _JustDied();
-            }
-
-            void JustEngagedWith(Unit* who) override
-            {
-                Talk(SAY_AGGRO);
-                BossAI::JustEngagedWith(who);
-
-                events.ScheduleEvent(EVENT_POUNDING, 15s);
-                events.ScheduleEvent(EVENT_ARCANE_ORB, 3s);
-                events.ScheduleEvent(EVENT_KNOCK_AWAY, 30s);
-                events.ScheduleEvent(EVENT_BERSERK, 10min);
-            }
-
-            void UpdateAI(uint32 diff) override
-            {
-                if (!UpdateVictim())
-                    return;
-
-                events.Update(diff);
-
-                if (me->HasUnitState(UNIT_STATE_CASTING))
-                    return;
-
-                while (uint32 eventId = events.ExecuteEvent())
+                case EVENT_POUNDING:
+                    DoCastSelf(SPELL_POUNDING);
+                    events.Repeat(12s, 14s);
+                    break;
+                case EVENT_ARCANE_ORB:
                 {
-                    switch (eventId)
+                    std::vector<Unit*> target_list;
+                    for (ThreatReference const* ref : me->GetThreatManager().GetUnsortedThreatList())
                     {
-                        case EVENT_POUNDING:
-                            DoCastVictim(SPELL_POUNDING);
-                            Talk(SAY_POUNDING);
-                            events.ScheduleEvent(EVENT_POUNDING, 15s);
-                            break;
-                        case EVENT_ARCANE_ORB:
-                        {
-                            std::vector<Unit*> target_list;
-                            for (auto* ref : me->GetThreatManager().GetUnsortedThreatList())
-                            {
-                                Unit* target = ref->GetVictim();
-                                if (target->GetTypeId() == TYPEID_PLAYER && target->IsAlive() && !target->IsWithinDist(me, 18, false))
-                                    target_list.push_back(target);
-                            }
-
-                            Unit* target;
-                            if (!target_list.empty())
-                                target = *(target_list.begin() + rand32() % target_list.size());
-                            else
-                                target = me->GetVictim();
-
-                            if (target)
-                                me->CastSpell(target, SPELL_ARCANE_ORB);
-
-                            events.ScheduleEvent(EVENT_ARCANE_ORB, 3s);
-                            break;
-                        }
-                        case EVENT_KNOCK_AWAY:
-                            DoCastVictim(SPELL_KNOCK_AWAY);
-                            // Drop 25% aggro
-                            if (GetThreat(me->GetVictim()))
-                                ModifyThreatByPercent(me->GetVictim(), -25);
-
-                            events.ScheduleEvent(EVENT_KNOCK_AWAY, 30s);
-                            break;
-                        case EVENT_BERSERK:
-                            if (!Enraged)
-                            {
-                                DoCast(me, SPELL_BERSERK);
-                                Enraged = true;
-                            }
-                            break;
-                        default:
-                            break;
+                        Unit* target = ref->GetVictim();
+                        if (target->GetTypeId() == TYPEID_PLAYER && target->IsAlive() && !target->IsWithinDist(me, 18, false))
+                            target_list.push_back(target);
                     }
 
-                    if (me->HasUnitState(UNIT_STATE_CASTING))
-                        return;
-                }
+                    Unit* target;
+                    if (!target_list.empty())
+                        target = Trinity::Containers::SelectRandomContainerElement(target_list);
+                    else
+                        target = me->GetVictim();
 
-                DoMeleeAttackIfReady();
+                    if (target)
+                        DoCast(target, SPELL_ARCANE_ORB);
+
+                    events.Repeat(3s);
+                    break;
+                }
+                case EVENT_KNOCK_AWAY:
+                    DoCastVictim(SPELL_KNOCK_AWAY);
+                    events.Repeat(20s, 22s);
+                    break;
+                case EVENT_BERSERK:
+                    DoCastSelf(SPELL_BERSERK);
+                    break;
+                default:
+                    break;
             }
 
-        private:
-            bool Enraged;
-        };
-
-        CreatureAI* GetAI(Creature* creature) const override
-        {
-            return GetTheEyeAI<boss_void_reaverAI>(creature);
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
         }
+    }
 };
 
 void AddSC_boss_void_reaver()
 {
-    new boss_void_reaver();
+    RegisterTheEyeCreatureAI(boss_void_reaver);
 }
